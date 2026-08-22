@@ -2,12 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   TEAM CAKRA SWIMMING — DESIGN SYSTEM
+   Single source of truth for colors, surfaces, controls.
+   Pages must compose from these classes; no per-page styling.
+   ============================================================ */
+
 @layer components {
+  /* --- Buttons --- */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-primary {
-    @apply btn bg-brand-600 text-white hover:bg-brand-700;
+    @apply btn bg-brand-600 text-white shadow-sm hover:bg-brand-700;
   }
   .btn-secondary {
     @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
@@ -15,17 +22,107 @@
   .btn-danger {
     @apply btn bg-red-600 text-white hover:bg-red-700;
   }
+  .btn-ghost {
+    @apply btn text-slate-600 hover:bg-slate-100 hover:text-slate-900;
+  }
+
+  /* --- Forms --- */
   .input {
-    @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500;
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:cursor-not-allowed disabled:bg-slate-100;
   }
   .label {
     @apply mb-1 block text-sm font-medium text-slate-700;
   }
+
+  /* --- Surfaces --- */
   .card {
-    @apply rounded-xl border border-slate-200 bg-white p-5 shadow-sm;
+    @apply rounded-xl border border-slate-200 bg-white p-5 shadow-card;
   }
+  .card-flat {
+    @apply rounded-xl border border-slate-200 bg-white p-4;
+  }
+  /* Section header inside a card */
+  .card-title {
+    @apply text-sm font-semibold uppercase tracking-wide text-slate-500;
+  }
+
+  /* --- Page scaffolding --- */
+  .page-header {
+    @apply mb-6 flex flex-wrap items-end justify-between gap-4;
+  }
+  .page-title {
+    @apply text-xl font-bold tracking-tight text-navy-900 sm:text-2xl;
+  }
+  .page-subtitle {
+    @apply mt-0.5 text-sm text-slate-500;
+  }
+  .section-gap {
+    @apply space-y-4;
+  }
+
+  /* --- Stat tile (dashboard KPI) --- */
+  .stat-card {
+    @apply rounded-xl border border-slate-200 bg-white p-4 shadow-card;
+  }
+  .stat-label {
+    @apply text-[11px] font-semibold uppercase tracking-wider text-slate-500;
+  }
+  .stat-value {
+    @apply mt-1 text-2xl font-bold tracking-tight text-navy-900;
+  }
+
+  /* --- Badges --- */
   .badge {
-    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+  .badge-neutral {
+    @apply badge bg-slate-100 text-slate-700;
+  }
+  .badge-success {
+    @apply badge bg-emerald-100 text-emerald-800;
+  }
+  .badge-warning {
+    @apply badge bg-amber-100 text-amber-800;
+  }
+  .badge-danger {
+    @apply badge bg-red-100 text-red-700;
+  }
+  .badge-info {
+    @apply badge bg-sky-100 text-sky-700;
+  }
+
+  /* --- Tables --- */
+  .table-wrap {
+    @apply overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-card;
+  }
+  .table {
+    @apply w-full min-w-[640px] text-left text-sm;
+  }
+  .table thead th {
+    @apply whitespace-nowrap border-b border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500;
+  }
+  .table tbody td {
+    @apply border-b border-slate-100 px-3 py-2.5 align-middle;
+  }
+  .table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+  .table tbody tr:hover {
+    @apply bg-brand-50/40;
+  }
+
+  /* --- States --- */
+  .skeleton {
+    @apply animate-pulse rounded-lg bg-slate-200;
+  }
+  .empty-state {
+    @apply flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/60 px-6 py-10 text-center;
+  }
+  .empty-state-title {
+    @apply text-sm font-semibold text-slate-700;
+  }
+  .empty-state-desc {
+    @apply max-w-sm text-xs text-slate-500;
   }
 }
 
@@ -33,15 +130,20 @@ html { color-scheme: light; }
 html.dark { color-scheme: dark; }
 body { transition: background-color 160ms ease, color 160ms ease; }
 
-/* Semantic dark surfaces for the existing utility-first UI. */
-.dark body { background-color: #0f172a; color: #e2e8f0; }
-.dark .bg-white { background-color: #172033; }
-.dark .bg-slate-50 { background-color: #0f172a; }
-.dark .bg-slate-100 { background-color: #1e293b; }
-.dark .bg-slate-200 { background-color: #334155; }
-.dark .border-slate-100 { border-color: #263449; }
-.dark .border-slate-200 { border-color: #334155; }
-.dark .border-slate-300 { border-color: #475569; }
+/* ============================================================
+   DARK MODE — deep aquatic navy, never pure black.
+   Utility-level overrides keep every existing page working
+   without touching its markup.
+   ============================================================ */
+.dark body { background-color: #0b1424; color: #e2e8f0; }
+.dark .bg-white { background-color: #152238; }
+.dark .bg-slate-50 { background-color: #0b1424; }
+.dark .bg-slate-100 { background-color: #1b2a44; }
+.dark .bg-slate-200 { background-color: #33455f; }
+.dark .border-slate-100 { border-color: #22314d; }
+.dark .border-slate-200 { border-color: #33455f; }
+.dark .border-slate-300 { border-color: #47597a; }
+.dark .text-navy-900 { color: #f1f5f9; }
 .dark .text-slate-900 { color: #f8fafc; }
 .dark .text-slate-800 { color: #f1f5f9; }
 .dark .text-slate-700 { color: #e2e8f0; }
@@ -52,11 +154,16 @@ body { transition: background-color 160ms ease, color 160ms ease; }
 .dark .text-brand-800 { color: #6ee7b7; }
 .dark .text-brand-700 { color: #6ee7b7; }
 .dark .text-brand-600 { color: #34d399; }
-.dark .hover\:bg-slate-50:hover { background-color: #1e293b; }
-.dark .hover\:bg-slate-200:hover { background-color: #475569; }
-.dark .hover\:bg-brand-50:hover { background-color: #12352d; }
-.dark .bg-brand-50 { background-color: #12352d; }
+.dark .hover\:bg-slate-50:hover { background-color: #1b2a44; }
+.dark .hover\:bg-slate-100:hover { background-color: #22314d; }
+.dark .hover\:bg-slate-200:hover { background-color: #33455f; }
+.dark .hover\:bg-brand-50:hover { background-color: #0d3529; }
+.dark .hover\:text-slate-900:hover { color: #f8fafc; }
+.dark .hover\:text-brand-700:hover { color: #5fe8bd; }
+.dark .bg-brand-50 { background-color: #0d3529; }
 .dark .bg-brand-100 { background-color: #14532d; }
+.dark .bg-brand-50\/40 { background-color: rgb(13 53 41 / 0.4); }
+.dark .bg-brand-50\/60 { background-color: rgb(13 53 41 / 0.6); }
 .dark .bg-red-50 { background-color: #3f1d26; }
 .dark .bg-red-100 { background-color: #7f1d1d; }
 .dark .bg-amber-50 { background-color: #422006; }
@@ -65,15 +172,41 @@ body { transition: background-color 160ms ease, color 160ms ease; }
 .dark .bg-emerald-100 { background-color: #065f46; }
 .dark .bg-sky-50 { background-color: #082f49; }
 .dark .bg-sky-100 { background-color: #0c4a6e; }
+.dark .text-emerald-800 { color: #6ee7b7; }
 .dark .text-red-700 { color: #fca5a5; }
 .dark .text-amber-700 { color: #fcd34d; }
 .dark .text-amber-800, .dark .text-amber-900 { color: #fde68a; }
 .dark .text-emerald-700 { color: #6ee7b7; }
 .dark .text-sky-700 { color: #7dd3fc; }
-.dark .input { background-color: #111827; color: #f8fafc; border-color: #475569; }
+.dark .input { background-color: #101c30; color: #f8fafc; border-color: #47597a; }
 .dark .input::placeholder { color: #94a3b8; }
-.dark select.input option { background-color: #172033; color: #f8fafc; }
-.dark .from-brand-50 { --tw-gradient-from: #022c22 var(--tw-gradient-from-position); --tw-gradient-to: rgb(2 44 34 / 0) var(--tw-gradient-to-position); }
-.dark .to-slate-50 { --tw-gradient-to: #0f172a var(--tw-gradient-to-position); }
-.dark input[type="checkbox"], .dark input[type="radio"] { accent-color: #10b981; }
-.dark .shadow-sm, .dark .shadow-lg { --tw-shadow-color: rgb(0 0 0 / 0.25); }
+.dark select.input option { background-color: #152238; color: #f8fafc; }
+.dark .from-brand-50 { --tw-gradient-from: #032e26 var(--tw-gradient-from-position); --tw-gradient-to: rgb(3 46 38 / 0) var(--tw-gradient-from-position); }
+.dark .to-slate-50 { --tw-gradient-to: #0b1424 var(--tw-gradient-to-position); }
+.dark input[type="checkbox"], .dark input[type="radio"] { accent-color: #12b886; }
+.dark .shadow-sm, .dark .shadow-lg { --tw-shadow-color: rgb(0 0 0 / 0.35); }
+.dark .shadow-card { box-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.35); }
+/* Component classes with baked-in light colors */
+.dark .btn-secondary { background-color: #1b2a44; border-color: #47597a; color: #e2e8f0; }
+.dark .btn-secondary:hover { background-color: #22314d; }
+.dark .btn-ghost { color: #cbd5e1; }
+.dark .btn-ghost:hover { background-color: #22314d; color: #f8fafc; }
+.dark .label { color: #cbd5e1; }
+.dark .card, .dark .card-flat, .dark .stat-card, .dark .table-wrap { background-color: #152238; border-color: #33455f; }
+.dark .card-title { color: #94a3b8; }
+.dark .page-title { color: #f1f5f9; }
+.dark .page-subtitle { color: #94a3b8; }
+.dark .stat-label { color: #94a3b8; }
+.dark .stat-value { color: #f1f5f9; }
+.dark .badge-neutral { background-color: #1b2a44; color: #cbd5e1; }
+.dark .badge-success { background-color: #065f46; color: #6ee7b7; }
+.dark .badge-warning { background-color: #78350f; color: #fcd34d; }
+.dark .badge-danger { background-color: #7f1d1d; color: #fca5a5; }
+.dark .badge-info { background-color: #0c4a6e; color: #7dd3fc; }
+.dark .table thead th { background-color: #101c30; color: #94a3b8; border-color: #33455f; }
+.dark .table tbody td { border-color: #22314d; }
+.dark .table tbody tr:hover { background-color: rgb(13 53 41 / 0.4); }
+.dark .skeleton { background-color: #1b2a44; }
+.dark .empty-state { border-color: #33455f; background-color: rgb(27 42 68 / 0.5); }
+.dark .empty-state-title { color: #e2e8f0; }
+.dark .empty-state-desc { color: #94a3b8; }
