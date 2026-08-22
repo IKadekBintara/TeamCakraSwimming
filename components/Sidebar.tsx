@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   LayoutDashboard, Users, UsersRound, CalendarDays, ClipboardCheck,
-  BarChart3, FileSpreadsheet, UserCog, Settings, ScrollText, Waves, LogOut,
+  BarChart3, FileSpreadsheet, UserCog, Settings, ScrollText, Waves, LogOut, CalendarRange, Wallet,
 } from "lucide-react";
 import type { Role } from "@/types";
 
@@ -23,8 +23,10 @@ const NAV: NavItem[] = [
   { href: "/atlet", label: "Atlet", icon: Users, roles: ALL },
   { href: "/kelompok", label: "Kelompok Latihan", icon: UsersRound, roles: ["admin", "operator", "coach", "group_leader"] },
   { href: "/jadwal", label: "Jadwal", icon: CalendarDays, roles: ALL },
+  { href: "/events", label: "Events", icon: CalendarRange, roles: ALL },
   { href: "/absensi", label: "Absensi", icon: ClipboardCheck, roles: ["admin", "operator", "coach", "group_leader"] },
   { href: "/laporan", label: "Laporan", icon: BarChart3, roles: ["admin", "operator", "coach", "group_leader"] },
+  { href: "/keuangan", label: "Keuangan", icon: Wallet, roles: ["admin"] },
   { href: "/import-export", label: "Import / Export", icon: FileSpreadsheet, roles: ["admin", "operator"] },
   { href: "/users", label: "Users", icon: UserCog, roles: ["admin"] },
   { href: "/settings", label: "Settings", icon: Settings, roles: ["admin"] },

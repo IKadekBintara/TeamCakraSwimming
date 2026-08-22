@@ -21,7 +21,7 @@ export default async function AtletDetailPage({
 
   if (!athlete) notFound();
 
-  const [{ data: membership }, { data: attendance }, { data: history }] = await Promise.all([
+  const [{ data: membership }, { data: attendance }, { data: history }, { data: eventRegs }] = await Promise.all([
     supabase
       .from("training_group_members")
       .select("group_id, joined_at, training_groups(name, location)")
@@ -39,6 +39,11 @@ export default async function AtletDetailPage({
       .select("joined_at, left_at, training_groups(name)")
       .eq("athlete_id", params.id)
       .order("joined_at", { ascending: false }),
+    supabase
+      .from("event_registrations")
+      .select("id, ku, ku_override, status, events(name,event_date), event_registration_entries(event_races(name)), event_payments(payment_status,total_amount,amount_paid,remaining_amount)")
+      .eq("athlete_id", params.id)
+      .order("created_at", { ascending: false }),
   ]);
 
   const total = attendance?.length ?? 0;
@@ -161,6 +166,11 @@ export default async function AtletDetailPage({
             })}
           </ul>
         )}
+      </div>
+
+      <div className="card">
+        <h2 className="mb-3 font-semibold">Event & Pembayaran</h2>
+        {(eventRegs ?? []).length === 0 ? <p className="text-sm text-slate-500">Belum pernah mengikuti event.</p> : <ul className="divide-y divide-slate-100 text-sm">{(eventRegs ?? []).map((r) => { const event = r.events as { name?: string; event_date?: string } | null; const payment = Array.isArray(r.event_payments) ? r.event_payments[0] : r.event_payments; const races = (r.event_registration_entries ?? []).map((e) => (e.event_races as { name?: string } | null)?.name).filter(Boolean).join(", "); return <li key={r.id} className="space-y-1 py-3"><div className="flex justify-between gap-3"><span className="font-medium">{event?.name ?? "Event"}</span><span className="badge bg-slate-100 text-slate-700">{payment?.payment_status ?? "—"}</span></div><p className="text-xs text-slate-500">{event?.event_date ?? "—"} · {r.ku_override || r.ku} · {races || "Nomor belum tercatat"}</p><p className="text-xs text-slate-600">Tagihan {payment ? `Rp${Number(payment.total_amount || 0).toLocaleString("id-ID")} · Dibayar Rp${Number(payment.amount_paid || 0).toLocaleString("id-ID")} · Sisa Rp${Number(payment.remaining_amount || 0).toLocaleString("id-ID")}` : "—"}</p></li>; })}</ul>}
       </div>
 
       <div className="card">

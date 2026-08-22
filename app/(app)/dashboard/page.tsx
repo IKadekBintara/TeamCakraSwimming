@@ -4,6 +4,7 @@ import GrowthChart, { type GrowthPoint } from "@/components/GrowthChart";
 import GroupDistribution from "@/components/GroupDistribution";
 import Link from "next/link";
 import { DAY_NAMES } from "@/types";
+import { rupiah } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,8 @@ export default async function DashboardPage() {
     { data: todaySessions },
     { data: groups },
     { data: members },
+    { data: activeEvents },
+    { data: eventPayments },
   ] = await Promise.all([
     supabase.from("athletes").select("id, status, join_date, left_at"),
     supabase
@@ -56,6 +59,8 @@ export default async function DashboardPage() {
       .eq("session_date", today),
     supabase.from("training_groups").select("id, name, is_active").eq("is_active", true),
     supabase.from("training_group_members").select("group_id, athlete_id").is("left_at", null),
+    supabase.from("events").select("id").eq("status", "OPEN"),
+    supabase.from("event_payments").select("total_amount, amount_paid, payment_status"),
   ]);
 
   const athletes = allAthletes ?? [];
@@ -66,6 +71,10 @@ export default async function DashboardPage() {
   const leftThisMonth = athletes.filter((a) => a.left_at && a.left_at >= monthStart).length;
   const totalLeft = athletes.filter((a) => a.status === "LEFT_CLUB").length;
   const netGrowth = newThisMonth - leftThisMonth;
+  const totalEventBills = (eventPayments ?? []).filter((p) => p.payment_status !== "CANCELLED").reduce((n, p) => n + Number(p.total_amount || 0), 0);
+  const totalEventPaid = (eventPayments ?? []).filter((p) => ["LUNAS", "DP"].includes(p.payment_status)).reduce((n, p) => n + Number(p.amount_paid || 0), 0);
+  const pendingPayments = (eventPayments ?? []).filter((p) => p.payment_status === "MENUNGGU_VERIFIKASI").length;
+  const unpaidPayments = (eventPayments ?? []).filter((p) => p.payment_status === "BELUM_BAYAR").length;
 
   // Kehadiran hari ini
   const sessionIds = (todaySessions ?? []).map((s) => s.id);
@@ -136,6 +145,13 @@ export default async function DashboardPage() {
         <StatCard label="Hadir" value={present} accent="text-emerald-600" />
         <StatCard label="Izin / Sakit" value={`${excused} / ${sick}`} accent="text-amber-600" />
         <StatCard label="Tingkat Kehadiran" value={`${rate}%`} accent="text-brand-700" hint={`${absent} alpa`} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <StatCard label="Event Aktif" value={activeEvents?.length ?? 0} accent="text-brand-700" />
+        <StatCard label="Menunggu Verifikasi" value={pendingPayments} accent="text-amber-600" />
+        <StatCard label="Belum Bayar" value={unpaidPayments} accent="text-red-600" />
+        <StatCard label="Uang Masuk Event" value={rupiah(totalEventPaid)} accent="text-emerald-600" hint={`Tagihan ${rupiah(totalEventBills)}`} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

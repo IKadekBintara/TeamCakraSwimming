@@ -51,6 +51,19 @@ export async function POST(req: NextRequest) {
 
   try {
     switch (action) {
+      case "list_events": {
+        const { data, error } = await supabase.from("events").select("id,name,event_date,location,status,fee_per_entry,admin_fee").order("event_date", { ascending: false }).limit(100);
+        if (error) throw error;
+        return NextResponse.json({ events: data });
+      }
+
+      case "get_event_payment": {
+        const transactionId = String(body.transaction_id ?? "").trim();
+        if (!transactionId) return NextResponse.json({ error: "transaction_id required" }, { status: 400 });
+        const { data, error } = await supabase.from("event_payments").select("transaction_id,athlete_name,cakra,total_amount,amount_paid,remaining_amount,payment_status,payment_method,events(name,event_date)").eq("transaction_id", transactionId).maybeSingle();
+        if (error) throw error;
+        return NextResponse.json({ payment: data, can_verify: false, note: "Hermes tidak boleh memverifikasi pembayaran. Admin harus melakukan verifikasi melalui website." });
+      }
       case "ping":
         return NextResponse.json({ ok: true, service: "absensi-team-cakra-swimming" });
 

@@ -22,6 +22,7 @@ Sistem absensi & manajemen atlet **TEAM CAKRA SWIMMING CLUB**.
    - `supabase/migrations/0001_initial_schema.sql` — tabel + RLS
    - `supabase/migrations/0002_storage.sql` — bucket foto atlet
    - `supabase/migrations/0003_seed_dev.sql` — akun test development (opsional, JANGAN di produksi)
+   - `supabase/migrations/0004_events_registration_payment.sql` — Events, nomor lomba, pendaftaran, pembayaran manual, payment settings, audit policy, dan bucket bukti pembayaran
 
 3. **Salin env**
 

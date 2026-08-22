@@ -117,6 +117,55 @@ export async function GET(req: NextRequest) {
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(srows), "Jadwal");
     filename = `kelompok-jadwal-team-cakra.xlsx`;
+  } else if (kind === "event_registrations" || kind === "event_finance") {
+    const { data: payments, error } = await supabase
+      .from("event_payments")
+      .select("id, transaction_id, athlete_id, athlete_name, cakra, jumlah_nomor, registration_fee, admin_fee, total_amount, amount_paid, remaining_amount, payment_status, payment_method, payment_destination, submitted_at, verified_at, notes, events(name, event_date), event_registrations(ku, ku_override, event_registration_entries(event_races(name)), athletes(full_name, gender, birth_date))")
+      .order("created_at");
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (kind === "event_registrations") {
+      const rows = (payments ?? []).map((p) => {
+        const reg = p.event_registrations as { ku?: string; ku_override?: string | null; event_registration_entries?: Array<{ event_races?: { name?: string } | null }>; athletes?: { full_name?: string; gender?: string | null; birth_date?: string | null } | null } | null;
+        return {
+          "ID": p.athlete_id,
+          "Nama": p.athlete_name,
+          "PA/PI": reg?.athletes?.gender ?? "",
+          "Tanggal Lahir": reg?.athletes?.birth_date ?? "",
+          "Tahun Lahir": reg?.athletes?.birth_date ? String(reg.athletes.birth_date).slice(0, 4) : "",
+          "KU": reg?.ku_override || reg?.ku || "",
+          "Cakra": p.cakra ?? "",
+          "Event": (p.events as { name?: string } | null)?.name ?? "",
+          "Nomor Lomba": (reg?.event_registration_entries ?? []).map((e) => e.event_races?.name).filter(Boolean).join(", "),
+          "Jumlah Nomor": p.jumlah_nomor,
+          "Status Pendaftaran": "REGISTERED",
+          "Catatan": p.notes ?? "",
+        };
+      });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Pendaftaran");
+      filename = "TEAM CAKRA — DATA PENDAFTARAN DOLPHIN.xlsx";
+    } else {
+      const rows = (payments ?? []).map((p) => ({
+        "ID Transaksi": p.transaction_id,
+        "ID Atlet": p.athlete_id,
+        "Nama": p.athlete_name,
+        "Cakra": p.cakra ?? "",
+        "Event": (p.events as { name?: string } | null)?.name ?? "",
+        "Jumlah Nomor": p.jumlah_nomor,
+        "Uang Pendaftaran": p.registration_fee,
+        "Admin": p.admin_fee,
+        "Total Tagihan": p.total_amount,
+        "Sudah Dibayar": p.amount_paid,
+        "Sisa": p.remaining_amount,
+        "Status Pembayaran": p.payment_status,
+        "Metode Pembayaran": p.payment_method ?? "",
+        "Tujuan Pembayaran": p.payment_destination ?? "",
+        "Tanggal Bayar": p.submitted_at ?? "",
+        "Verified At": p.verified_at ?? "",
+        "Catatan": p.notes ?? "",
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Keuangan");
+      filename = "TEAM CAKRA — KEUANGAN DOLPHIN.xlsx";
+    }
   } else {
     return NextResponse.json({ error: "Unknown export kind" }, { status: 400 });
   }

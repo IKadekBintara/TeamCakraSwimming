@@ -21,6 +21,12 @@ export default function ExportButtons({ from, to }: { from: string; to: string }
       <button type="button" onClick={() => go("groups")} className="btn-secondary text-sm">
         ⬇ Kelompok & Jadwal
       </button>
+      <button type="button" onClick={() => go("event_registrations")} className="btn-secondary text-sm">
+        ⬇ Data Pendaftaran Dolphin
+      </button>
+      <button type="button" onClick={() => go("event_finance")} className="btn-secondary text-sm">
+        ⬇ Keuangan Dolphin
+      </button>
     </div>
   );
 }
