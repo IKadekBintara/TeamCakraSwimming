@@ -250,7 +250,7 @@ export async function GET(req: NextRequest) {
       "Catatan": p.notes ?? "",
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Keuangan");
-    filename = "TEAM CAKRA — KEUANGAN DOLPHIN.xlsx";
+    filename = "TEAM CAKRA - KEUANGAN DOLPHIN.xlsx";
   } else {
     log("stage=request.validation", { error: "Unknown export kind" });
     return NextResponse.json({ error: "Unknown export kind" }, { status: 400, headers: { "x-request-id": requestId } });

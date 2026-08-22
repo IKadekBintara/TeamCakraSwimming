@@ -17,12 +17,13 @@ function fail(message: string, status = 400) { return NextResponse.json({ error:
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await admin(); if ("error" in ctx) return fail(ctx.error === 401 ? "Sesi login diperlukan" : "Admin only", ctx.error);
-  const [{ data: event, error: eventError }, { data: races, error: raceError }] = await Promise.all([
+  const [{ data: event, error: eventError }, { data: races, error: raceError }, { data: kuConfigs, error: kuError }] = await Promise.all([
     ctx.service.from("events").select("id,name,event_date,location,description,registration_deadline,status,fee_per_entry,admin_fee,contact_person,contact_whatsapp,payment_instructions").eq("id", params.id).single(),
     ctx.service.from("event_races").select("id,event_id,name,distance_m,stroke,allowed_kus,is_relay,is_active,sort_order,price,is_free").eq("event_id", params.id).order("sort_order"),
+    ctx.service.from("event_ku_configurations").select("id,event_id,ku_label,birth_year_start,birth_year_end,allowed_races,enabled,sort_order").eq("event_id", params.id).order("sort_order"),
   ]);
-  if (eventError || raceError) return fail(eventError?.message || raceError?.message || "Gagal membaca konfigurasi", 500);
-  return NextResponse.json({ event, races: races || [] });
+  if (eventError || raceError || kuError) return fail(eventError?.message || raceError?.message || kuError?.message || "Gagal membaca konfigurasi", 500);
+  return NextResponse.json({ event, races: races || [], ku_configs: kuConfigs || [] });
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
@@ -52,6 +53,40 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const { error } = await query;
     if (error) return fail(error.message);
     await ctx.service.from("audit_logs").insert({ actor_id: ctx.user.id, action: id ? "UPDATE_EVENT_RACE_RULE" : "CREATE_EVENT_RACE_RULE", entity: "event_races", entity_id: id || params.id, new_value: patch });
+    return NextResponse.json({ ok: true });
+  }
+  if (action === "ku_config") {
+    const id = String(body.id || "");
+    const kuLabel = String(body.ku_label || "").trim();
+    if (!kuLabel) return fail("Label KU wajib diisi");
+    const yearStart = body.birth_year_start === null || body.birth_year_start === "" ? null : Number(body.birth_year_start);
+    const yearEnd = body.birth_year_end === null || body.birth_year_end === "" ? null : Number(body.birth_year_end);
+    if (yearStart !== null && (!Number.isInteger(yearStart) || yearStart < 1990)) return fail("Tahun mulai tidak valid");
+    if (yearEnd !== null && (!Number.isInteger(yearEnd) || yearEnd > 2100)) return fail("Tahun akhir tidak valid");
+    if (yearStart !== null && yearEnd !== null && yearStart > yearEnd) return fail("Tahun mulai tidak boleh setelah tahun akhir");
+    const allowedRaces = Array.isArray(body.allowed_races) ? body.allowed_races.map(String) : [];
+    if (allowedRaces.length) {
+      const { count } = await ctx.service.from("event_races").select("id", { count: "exact", head: true }).eq("event_id", params.id).in("id", allowedRaces);
+      if ((count || 0) < allowedRaces.length) return fail("Ada nomor lomba yang bukan milik event ini");
+    }
+    const patch = { ku_label: kuLabel, birth_year_start: yearStart, birth_year_end: yearEnd, allowed_races: allowedRaces, enabled: Boolean(body.enabled), sort_order: Number(body.sort_order || 0), updated_at: new Date().toISOString() };
+    let query;
+    if (id) query = ctx.service.from("event_ku_configurations").update(patch).eq("id", id).eq("event_id", params.id);
+    else query = ctx.service.from("event_ku_configurations").upsert({ ...patch, event_id: params.id }, { onConflict: "event_id,ku_label" });
+    const { error } = await query;
+    if (error) {
+      if (error.code === "23505") return fail(`KU "${kuLabel}" sudah ada di event ini`);
+      return fail(error.message);
+    }
+    await ctx.service.from("audit_logs").insert({ actor_id: ctx.user.id, action: id ? "UPDATE_EVENT_KU_CONFIG" : "CREATE_EVENT_KU_CONFIG", entity: "event_ku_configurations", entity_id: id || params.id, new_value: patch });
+    return NextResponse.json({ ok: true });
+  }
+  if (action === "ku_config_delete") {
+    const id = String(body.id || "");
+    if (!id) return fail("id konfigurasi wajib diisi");
+    const { error } = await ctx.service.from("event_ku_configurations").delete().eq("id", id).eq("event_id", params.id);
+    if (error) return fail(error.message);
+    await ctx.service.from("audit_logs").insert({ actor_id: ctx.user.id, action: "DELETE_EVENT_KU_CONFIG", entity: "event_ku_configurations", entity_id: id });
     return NextResponse.json({ ok: true });
   }
   return fail("Aksi konfigurasi tidak dikenali");
