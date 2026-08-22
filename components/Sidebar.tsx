@@ -26,6 +26,7 @@ const NAV: NavItem[] = [
   { href: "/kelompok", label: "Kelompok Latihan", icon: UsersRound, roles: ["admin", "operator", "coach", "group_leader", "ketua_kelompok"] },
   { href: "/jadwal", label: "Jadwal", icon: CalendarDays, roles: ALL },
   { href: "/events", label: "Events", icon: CalendarRange, roles: ALL },
+  { href: "/event-settings", label: "Event Settings", icon: Settings, roles: ["admin"] },
   { href: "/absensi", label: "Absensi", icon: ClipboardCheck, roles: ["admin", "operator", "coach", "group_leader", "ketua_kelompok"] },
   { href: "/laporan", label: "Laporan", icon: BarChart3, roles: ["admin", "operator", "coach", "group_leader", "ketua_kelompok"] },
   { href: "/keuangan", label: "Keuangan", icon: Wallet, roles: ["admin"] },

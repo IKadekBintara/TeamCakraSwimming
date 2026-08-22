@@ -17,7 +17,7 @@ export default async function EventDetailPage({ params }: { params: { id: string
   const canRegister = canManage || profile?.role === "parent" || profile?.role === "athlete";
   const [{ data: event }, { data: races }, { data: athletes }, { data: memberships }, { data: registrations }] = await Promise.all([
     supabase.from("events").select("id,name,event_date,location,description,registration_deadline,fee_per_entry,admin_fee,status").eq("id", params.id).single(),
-    supabase.from("event_races").select("id,name,allowed_kus,is_relay,sort_order").eq("event_id", params.id).eq("is_active", true).order("sort_order"),
+    supabase.from("event_races").select("id,name,allowed_kus,is_relay,sort_order,price,is_free").eq("event_id", params.id).eq("is_active", true).order("sort_order"),
     supabase.from("athletes").select("id,full_name,birth_date").eq("status", "ACTIVE").order("full_name"),
     supabase.from("training_group_members").select("athlete_id,training_groups(name)").is("left_at", null),
     supabase.from("event_registrations").select("id,athlete_id,ku,ku_override,status,athletes(full_name),event_registration_entries(event_races(name)),event_payments(id,payment_status,total_amount,amount_paid,remaining_amount,payment_proof,payment_method)").eq("event_id", params.id).order("created_at", { ascending: false }),

@@ -9,11 +9,14 @@ export default function EventForm() {
   const supabase = createClient();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", event_date: "", location: "", registration_deadline: "", fee_per_entry: "55000", admin_fee: "20000", description: "", status: "DRAFT" });
+  const [form, setForm] = useState({ name: "", event_date: "", location: "", registration_deadline: "", fee_per_entry: "0", admin_fee: "0", description: "", status: "DRAFT" });
   const set = (key: keyof typeof form, value: string) => setForm((old) => ({ ...old, [key]: value }));
 
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setSaving(true); setError(null);
+    if (!form.name.trim() || !form.event_date) { setError("Nama event dan tanggal wajib diisi."); setSaving(false); return; }
+    if (form.registration_deadline && form.registration_deadline > form.event_date) { setError("Deadline tidak boleh setelah tanggal event."); setSaving(false); return; }
+    if (Number(form.fee_per_entry) < 0 || Number(form.admin_fee) < 0) { setError("Biaya tidak boleh negatif."); setSaving(false); return; }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setError("Sesi login berakhir."); setSaving(false); return; }
     const { data, error: insertError } = await supabase.from("events").insert({

@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function EventsPage() {
   const supabase = createClient();
   const [{ data: events }, { data: profile }] = await Promise.all([
-    supabase.from("events").select("id, name, event_date, location, fee_per_entry, admin_fee, status, registration_deadline").order("event_date", { ascending: false }),
+    supabase.from("events").select("id, name, event_date, location, description, contact_person, contact_whatsapp, payment_instructions, fee_per_entry, admin_fee, status, registration_deadline").order("event_date", { ascending: false }),
     supabase.from("profiles").select("role").eq("id", (await supabase.auth.getUser()).data.user?.id ?? "").maybeSingle(),
   ]);
   const canManage = profile?.role === "admin" || profile?.role === "operator";
