@@ -53,7 +53,7 @@ export default async function DashboardPage() {
     { data: eventPayments },
     { data: currentProfile },
   ] = await Promise.all([
-    supabase.from("athletes").select("id, status, join_date, left_at"),
+    supabase.from("athletes").select("id, status, join_date, left_at, cakra"),
     supabase
       .from("training_sessions")
       .select("id, session_date, start_time, end_time, location, group_id, training_groups(name)")
@@ -61,7 +61,7 @@ export default async function DashboardPage() {
     supabase.from("training_groups").select("id, name, is_active").eq("is_active", true),
     supabase.from("training_group_members").select("group_id, athlete_id").is("left_at", null),
     supabase.from("events").select("id").eq("status", "OPEN"),
-    supabase.from("event_payments").select("total_amount, amount_paid, payment_status"),
+    supabase.from("event_payments").select("cakra, total_amount, amount_paid, payment_status"),
     supabase.from("profiles").select("role").eq("id", (await supabase.auth.getUser()).data.user?.id ?? "").maybeSingle(),
   ]);
 
@@ -95,6 +95,25 @@ export default async function DashboardPage() {
   }
   const totalMarked = present + excused + sick + absent;
   const rate = totalMarked > 0 ? Math.round((present / totalMarked) * 100) : 0;
+
+  const cakraSummary = new Map<string, { athletes: number; registrations: number; bills: number; paid: number; remaining: number }>();
+  for (const athlete of athletes) {
+    const key = athlete.cakra || "Tidak tersedia";
+    const current = cakraSummary.get(key) ?? { athletes: 0, registrations: 0, bills: 0, paid: 0, remaining: 0 };
+    current.athletes += 1;
+    cakraSummary.set(key, current);
+  }
+  for (const payment of eventPayments ?? []) {
+    if (payment.payment_status === "CANCELLED") continue;
+    const key = payment.cakra || "Tidak tersedia";
+    const current = cakraSummary.get(key) ?? { athletes: 0, registrations: 0, bills: 0, paid: 0, remaining: 0 };
+    current.registrations += 1;
+    current.bills += Number(payment.total_amount || 0);
+    current.paid += Number(payment.amount_paid || 0);
+    current.remaining += Math.max(Number(payment.total_amount || 0) - Number(payment.amount_paid || 0), 0);
+    cakraSummary.set(key, current);
+  }
+  const cakraRows = Array.from(cakraSummary.entries()).sort(([a], [b]) => a.localeCompare(b));
 
   // Sesi hari ini dari jadwal
   const { data: todaySchedules } = await supabase
@@ -162,6 +181,11 @@ export default async function DashboardPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <GrowthChart data={byRange["6m"]} byRange={byRange} />
         <GroupDistribution items={distribution} />
+      </div>
+
+      <div className="card overflow-x-auto">
+        <div className="mb-3"><h2 className="text-lg font-semibold">Rekap per Cakra</h2><p className="text-sm text-slate-500">Ringkasan atlet dan transaksi event dari database.</p></div>
+        {cakraRows.length === 0 ? <p className="text-sm text-slate-500">Belum ada data Cakra.</p> : <table className="w-full min-w-[720px] text-sm"><thead><tr className="border-b text-left text-xs uppercase text-slate-500"><th className="px-3 py-2">Cakra</th><th className="px-3 py-2">Atlet</th><th className="px-3 py-2">Pendaftaran</th><th className="px-3 py-2">Tagihan</th><th className="px-3 py-2">Pembayaran</th><th className="px-3 py-2">Sisa</th></tr></thead><tbody className="divide-y">{cakraRows.map(([name, row]) => <tr key={name}><td className="px-3 py-2 font-medium">{name}</td><td className="px-3 py-2">{row.athletes}</td><td className="px-3 py-2">{row.registrations}</td><td className="px-3 py-2">{rupiah(row.bills)}</td><td className="px-3 py-2 text-emerald-700">{rupiah(row.paid)}</td><td className="px-3 py-2 text-amber-700">{rupiah(row.remaining)}</td></tr>)}</tbody></table>}
       </div>
 
       <div className="card">
