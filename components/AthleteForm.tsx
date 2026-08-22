@@ -34,6 +34,7 @@ export default function AthleteForm({
     whatsapp: athlete?.whatsapp ?? "",
     address: athlete?.address ?? "",
     program: athlete?.program ?? "",
+    cakra: athlete?.cakra ?? "Cakra Atlet",
     group_id: athlete?.current_group_id ?? "",
     join_date: athlete?.join_date ?? new Date().toISOString().slice(0, 10),
     status: (athlete?.status ?? "ACTIVE") as AthleteStatus,
@@ -84,6 +85,7 @@ export default function AthleteForm({
       whatsapp: form.whatsapp || null,
       address: form.address || null,
       program: form.program || null,
+      cakra: form.cakra || null,
       join_date: form.join_date || null,
       status: form.status,
       notes: form.notes || null,
@@ -157,6 +159,13 @@ export default function AthleteForm({
         <div>
           <label className="label">Program</label>
           <input className="input" placeholder="mis. Athlete / Pemula" value={form.program ?? ""} onChange={(e) => set("program", e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Cakra</label>
+          <select className="input" value={form.cakra ?? ""} onChange={(e) => set("cakra", e.target.value)}>
+            <option value="">Belum ditentukan</option>
+            {['Cakra 1','Cakra 2','Cakra 3','Cakra 4','Cakra 5','Cakra 6','Cakra Atlet','Cakra Azzahro'].map((cakra) => <option key={cakra} value={cakra}>{cakra}</option>)}
+          </select>
         </div>
         <div>
           <label className="label">Kelompok Latihan</label>

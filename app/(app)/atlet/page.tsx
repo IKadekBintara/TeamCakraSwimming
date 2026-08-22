@@ -22,7 +22,7 @@ export default async function AtletPage({
 
   let query = supabase
     .from("athletes")
-    .select("id, full_name, nickname, program, status, whatsapp, join_date, left_at")
+    .select("id, full_name, nickname, program, cakra, status, whatsapp, join_date, left_at")
     .order("full_name");
 
   if (q) query = query.ilike("full_name", `%${q}%`);
@@ -101,6 +101,7 @@ export default async function AtletPage({
             <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase text-slate-500">
               <th className="px-4 py-3">Nama</th>
               <th className="px-4 py-3">Program</th>
+              <th className="px-4 py-3">Cakra</th>
               <th className="px-4 py-3">Kelompok</th>
               <th className="px-4 py-3">Status</th>
             </tr>
@@ -115,6 +116,7 @@ export default async function AtletPage({
                   {a.nickname && <span className="ml-1 text-slate-400">({a.nickname})</span>}
                 </td>
                 <td className="px-4 py-3 text-slate-600">{a.program ?? "—"}</td>
+                <td className="px-4 py-3 text-slate-600">{a.cakra ?? "—"}</td>
                 <td className="px-4 py-3 text-slate-600">{groupOf[a.id] || "—"}</td>
                 <td className="px-4 py-3">
                   <span
@@ -133,7 +135,7 @@ export default async function AtletPage({
             ))}
             {(athletes ?? []).length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
                   Tidak ada atlet pada filter ini.
                 </td>
               </tr>

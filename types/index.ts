@@ -67,6 +67,7 @@ export interface Athlete {
   address: string | null;
   photo_url: string | null;
   program: string | null;
+  cakra: string | null;
   join_date: string | null;
   status: AthleteStatus;
   left_at: string | null;

@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   if (kind === "athletes" || kind === "athletes_active" || kind === "athletes_left") {
     let query = supabase
       .from("athletes")
-      .select("full_name, nickname, birth_date, gender, school, grade, parent_name, whatsapp, address, program, status, join_date, left_at, left_reason")
+      .select("full_name, nickname, birth_date, gender, school, grade, parent_name, whatsapp, address, program, cakra, status, join_date, left_at, left_reason")
       .order("full_name");
     if (kind === "athletes_active") query = query.eq("status", "ACTIVE");
     if (kind === "athletes_left") query = query.eq("status", "LEFT_CLUB");
@@ -52,6 +52,7 @@ export async function GET(req: NextRequest) {
       "WhatsApp": a.whatsapp,
       "Alamat": a.address,
       "Program": a.program,
+      "Cakra": a.cakra,
       "Kelompok": groupOf.get(a.full_name) ?? "",
       "Status": STATUS_LABELS[a.status as keyof typeof STATUS_LABELS] ?? a.status,
       "Tanggal Bergabung": a.join_date,
