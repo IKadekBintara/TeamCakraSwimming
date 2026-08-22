@@ -35,7 +35,7 @@ export default async function EventDetailPage({ params }: { params: { id: string
       <div className="mt-4 flex flex-wrap gap-4 text-sm"><span>Biaya nomor: <strong>{rupiah(event.fee_per_entry)}</strong></span><span>Admin: <strong>{rupiah(event.admin_fee)}</strong></span><span>Deadline: <strong>{event.registration_deadline || "—"}</strong></span></div>
     </div>
     <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-      <EventRegistrationForm event={event} races={races ?? []} athletes={formAthletes} />
+      <EventRegistrationForm event={event} races={races ?? []} athletes={formAthletes} canManage={canManage} />
       <RelayTeamForm eventId={event.id} races={races ?? []} athletes={formAthletes} />
       <div className="card overflow-x-auto"><h2 className="mb-3 text-lg font-semibold">Nomor Lomba</h2><table className="w-full min-w-[500px] text-sm"><thead><tr className="border-b text-left text-xs uppercase text-slate-500"><th className="px-2 py-2">Nomor</th><th className="px-2 py-2">KU</th><th className="px-2 py-2">Tipe</th></tr></thead><tbody className="divide-y">{(races ?? []).map((r) => <tr key={r.id}><td className="px-2 py-2 font-medium">{r.name}</td><td className="px-2 py-2 text-slate-600">{r.allowed_kus.join(", ") || "Semua"}</td><td className="px-2 py-2">{r.is_relay ? "Estafet" : "Individu"}</td></tr>)}</tbody></table></div>
     </div>
