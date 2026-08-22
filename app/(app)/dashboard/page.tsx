@@ -21,7 +21,7 @@ function buildGrowth(
   const now = new Date();
   const points: GrowthPoint[] = [];
   for (let i = months - 1; i >= 0; i--) {
-    const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1); // awal bulan berikutnya
+    const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
     let active = 0, joined = 0, left = 0;
     for (const a of athletes) {
       const j = a.join_date ? new Date(a.join_date + "T00:00:00") : null;
@@ -34,6 +34,28 @@ function buildGrowth(
     points.push({ label: `${MONTH_ID[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`, active, joined, left });
   }
   return points;
+}
+
+/** Label Bahasa Indonesia untuk aksi audit yang dikenal; aksi lain ditampilkan apa adanya (tanpa mengarang). */
+const ACTIVITY_LABELS: Record<string, string> = {
+  CREATE_EVENT_REGISTRATION: "Pendaftaran event dibuat",
+  create_event_registration: "Pendaftaran event dibuat",
+  create_athlete: "Atlet baru ditambahkan",
+  mark_left_club: "Atlet keluar dari klub",
+  CREATE_ACCOUNT: "Akun dibuat",
+  DELETE_ACCOUNT: "Akun dihapus",
+  UPDATE_EVENT_RACE_RULE: "Aturan/harga nomor lomba diubah",
+  DELETE_EVENT_RACE_RULE: "Nomor lomba dihapus",
+  update_event_status: "Status event diubah",
+  UPDATE_PAYMENT_SETTINGS: "Pengaturan pembayaran diubah",
+  VERIFY_PAYMENT: "Pembayaran diverifikasi",
+};
+
+function greeting(h: number) {
+  if (h < 11) return "Selamat pagi";
+  if (h < 15) return "Selamat siang";
+  if (h < 19) return "Selamat sore";
+  return "Selamat malam";
 }
 
 export default async function DashboardPage() {
@@ -49,8 +71,10 @@ export default async function DashboardPage() {
     { data: todaySessions },
     { data: groups },
     { data: members },
-    { data: activeEvents },
+    { data: allEvents },
     { data: eventPayments },
+    { data: registrations },
+    { data: auditLogs },
     { data: currentProfile },
   ] = await Promise.all([
     supabase.from("athletes").select("id, status, join_date, left_at, cakra"),
@@ -60,25 +84,111 @@ export default async function DashboardPage() {
       .eq("session_date", today),
     supabase.from("training_groups").select("id, name, is_active").eq("is_active", true),
     supabase.from("training_group_members").select("group_id, athlete_id").is("left_at", null),
-    supabase.from("events").select("id").eq("status", "OPEN"),
-    supabase.from("event_payments").select("cakra, total_amount, amount_paid, payment_status"),
-    supabase.from("profiles").select("role").eq("id", (await supabase.auth.getUser()).data.user?.id ?? "").maybeSingle(),
+    supabase.from("events").select("id, name, status, event_date, location, registration_deadline").order("event_date", { ascending: false }),
+    supabase.from("event_payments").select("event_id, cakra, total_amount, amount_paid, payment_status"),
+    supabase.from("event_registrations").select("id, event_id"),
+    supabase.from("audit_logs").select("id, action, entity, created_at, profiles(full_name)").order("created_at", { ascending: false }).limit(8),
+    supabase.from("profiles").select("role, full_name").eq("id", (await supabase.auth.getUser()).data.user?.id ?? "").maybeSingle(),
   ]);
 
   const athletes = allAthletes ?? [];
+  const payments = eventPayments ?? [];
+  const regs = registrations ?? [];
+
+  // ===== 8 KPI utama =====
   const totalAthletes = athletes.length;
   const activeAthletes = athletes.filter((a) => a.status === "ACTIVE").length;
-  const newThisMonth = athletes.filter((a) => a.join_date && a.join_date >= monthStart).length;
-  const newThisYear = athletes.filter((a) => a.join_date && a.join_date >= yearStart).length;
-  const leftThisMonth = athletes.filter((a) => a.left_at && a.left_at >= monthStart).length;
-  const totalLeft = athletes.filter((a) => a.status === "LEFT_CLUB").length;
-  const netGrowth = newThisMonth - leftThisMonth;
-  const totalEventBills = (eventPayments ?? []).filter((p) => p.payment_status !== "CANCELLED").reduce((n, p) => n + Number(p.total_amount || 0), 0);
-  const totalEventPaid = (eventPayments ?? []).filter((p) => ["LUNAS", "DP"].includes(p.payment_status)).reduce((n, p) => n + Number(p.amount_paid || 0), 0);
-  const pendingPayments = (eventPayments ?? []).filter((p) => p.payment_status === "MENUNGGU_VERIFIKASI").length;
-  const unpaidPayments = (eventPayments ?? []).filter((p) => p.payment_status === "BELUM_BAYAR").length;
+  const openEventCount = (allEvents ?? []).filter((e) => e.status === "OPEN").length;
+  const totalRegistrations = regs.length;
+  const unpaidCount = payments.filter((p) => p.payment_status === "BELUM_BAYAR").length;
+  const pendingCount = payments.filter((p) => p.payment_status === "MENUNGGU_VERIFIKASI").length;
+  const transactionCount = payments.filter((p) => p.payment_status !== "CANCELLED").length;
+  const totalRevenue = payments.filter((p) => ["LUNAS", "DP"].includes(p.payment_status)).reduce((n, p) => n + Number(p.amount_paid || 0), 0);
 
-  // Kehadiran hari ini
+  // ===== Financial overview =====
+  const finBills = payments.filter((p) => p.payment_status !== "CANCELLED").reduce((n, p) => n + Number(p.total_amount || 0), 0);
+  const finPaid = payments.filter((p) => ["LUNAS", "DP"].includes(p.payment_status)).reduce((n, p) => n + Number(p.amount_paid || 0), 0);
+  const finOutstanding = payments.filter((p) => ["BELUM_BAYAR"].includes(p.payment_status)).reduce((n, p) => n + Number(p.total_amount || 0), 0)
+    + payments.filter((p) => p.payment_status === "DP").reduce((n, p) => n + Math.max(Number(p.total_amount || 0) - Number(p.amount_paid || 0), 0), 0);
+  const statusCount = (s: string) => payments.filter((p) => p.payment_status === s).length;
+
+  const finRows = [
+    { label: "Total tagihan", value: finBills, tone: "bg-navy-500" },
+    { label: "Sudah dibayar (terverifikasi)", value: finPaid, tone: "bg-brand-600" },
+    { label: "Belum dibayar", value: finOutstanding, tone: "bg-red-400" },
+  ];
+  const finMax = Math.max(...finRows.map((r) => r.value), 1);
+
+  // ===== Event overview =====
+  const payByEvent = new Map<string, { regs: number; bills: number; paid: number; unpaid: number; pending: number }>();
+  for (const r of regs) {
+    const cur = payByEvent.get(r.event_id) ?? { regs: 0, bills: 0, paid: 0, unpaid: 0, pending: 0 };
+    cur.regs += 1;
+    payByEvent.set(r.event_id, cur);
+  }
+  for (const p of payments) {
+    if (!p.event_id || p.payment_status === "CANCELLED") continue;
+    const cur = payByEvent.get(p.event_id) ?? { regs: 0, bills: 0, paid: 0, unpaid: 0, pending: 0 };
+    cur.bills += Number(p.total_amount || 0);
+    if (["LUNAS", "DP"].includes(p.payment_status)) cur.paid += Number(p.amount_paid || 0);
+    if (p.payment_status === "BELUM_BAYAR") cur.unpaid += 1;
+    if (p.payment_status === "MENUNGGU_VERIFIKASI") cur.pending += 1;
+    payByEvent.set(p.event_id, cur);
+  }
+  const eventRows = (allEvents ?? []).map((e) => ({ ...e, stat: payByEvent.get(e.id) ?? { regs: 0, bills: 0, paid: 0, unpaid: 0, pending: 0 } }));
+  const openEvents = eventRows.filter((e) => e.status === "OPEN");
+  const otherEvents = eventRows.filter((e) => e.status !== "OPEN");
+
+  // ===== Kehadiran bulan ini (untuk Cakra overview) =====
+  const { data: monthSessions } = await supabase
+    .from("training_sessions")
+    .select("id")
+    .gte("session_date", monthStart);
+  const monthSessionIds = (monthSessions ?? []).map((s) => s.id);
+  const attByCakra = new Map<string, { present: number; total: number }>();
+  if (monthSessionIds.length > 0) {
+    const { data: att } = await supabase
+      .from("attendance")
+      .select("athlete_id, status")
+      .in("session_id", monthSessionIds);
+    const cakraOf = new Map(athletes.map((a) => [a.id, a.cakra || "Tanpa Cakra"]));
+    for (const a of att ?? []) {
+      const key = cakraOf.get(a.athlete_id) ?? "Tanpa Cakra";
+      const cur = attByCakra.get(key) ?? { present: 0, total: 0 };
+      cur.total += 1;
+      if (a.status === "present") cur.present += 1;
+      attByCakra.set(key, cur);
+    }
+  }
+
+  // ===== Rekap per Cakra =====
+  const cakraSummary = new Map<string, { athletes: number; active: number; registrations: number; bills: number; paid: number; remaining: number; attPresent: number; attTotal: number }>();
+  for (const athlete of athletes) {
+    const key = athlete.cakra || "Tidak tersedia";
+    const current = cakraSummary.get(key) ?? { athletes: 0, active: 0, registrations: 0, bills: 0, paid: 0, remaining: 0, attPresent: 0, attTotal: 0 };
+    current.athletes += 1;
+    if (athlete.status === "ACTIVE") current.active += 1;
+    cakraSummary.set(key, current);
+  }
+  for (const payment of payments) {
+    if (payment.payment_status === "CANCELLED") continue;
+    const key = payment.cakra || "Tidak tersedia";
+    const current = cakraSummary.get(key) ?? { athletes: 0, active: 0, registrations: 0, bills: 0, paid: 0, remaining: 0, attPresent: 0, attTotal: 0 };
+    current.registrations += 1;
+    current.bills += Number(payment.total_amount || 0);
+    current.paid += Number(payment.amount_paid || 0);
+    current.remaining += Math.max(Number(payment.total_amount || 0) - Number(payment.amount_paid || 0), 0);
+    cakraSummary.set(key, current);
+  }
+  for (const [key, att] of Array.from(attByCakra.entries())) {
+    const current = cakraSummary.get(key) ?? { athletes: 0, active: 0, registrations: 0, bills: 0, paid: 0, remaining: 0, attPresent: 0, attTotal: 0 };
+    current.attPresent += att.present;
+    current.attTotal += att.total;
+    cakraSummary.set(key, current);
+  }
+  const cakraRows = Array.from(cakraSummary.entries()).sort(([a], [b]) => a.localeCompare(b));
+
+  // ===== Kehadiran hari ini =====
   const sessionIds = (todaySessions ?? []).map((s) => s.id);
   let present = 0, excused = 0, sick = 0, absent = 0;
   if (sessionIds.length > 0) {
@@ -96,33 +206,13 @@ export default async function DashboardPage() {
   const totalMarked = present + excused + sick + absent;
   const rate = totalMarked > 0 ? Math.round((present / totalMarked) * 100) : 0;
 
-  const cakraSummary = new Map<string, { athletes: number; registrations: number; bills: number; paid: number; remaining: number }>();
-  for (const athlete of athletes) {
-    const key = athlete.cakra || "Tidak tersedia";
-    const current = cakraSummary.get(key) ?? { athletes: 0, registrations: 0, bills: 0, paid: 0, remaining: 0 };
-    current.athletes += 1;
-    cakraSummary.set(key, current);
-  }
-  for (const payment of eventPayments ?? []) {
-    if (payment.payment_status === "CANCELLED") continue;
-    const key = payment.cakra || "Tidak tersedia";
-    const current = cakraSummary.get(key) ?? { athletes: 0, registrations: 0, bills: 0, paid: 0, remaining: 0 };
-    current.registrations += 1;
-    current.bills += Number(payment.total_amount || 0);
-    current.paid += Number(payment.amount_paid || 0);
-    current.remaining += Math.max(Number(payment.total_amount || 0) - Number(payment.amount_paid || 0), 0);
-    cakraSummary.set(key, current);
-  }
-  const cakraRows = Array.from(cakraSummary.entries()).sort(([a], [b]) => a.localeCompare(b));
-
-  // Sesi hari ini dari jadwal
+  // ===== Jadwal & distribusi (fitur existing dipertahankan) =====
   const { data: todaySchedules } = await supabase
     .from("training_schedules")
     .select("id, group_id, start_time, end_time, location, training_groups(name)")
     .eq("day_of_week", todayDow)
     .eq("is_active", true);
 
-  // Distribusi atlet per grup
   const activeIds = new Set(athletes.filter((a) => a.status === "ACTIVE").map((a) => a.id));
   const groupCounts: Record<string, number> = {};
   for (const m of members ?? []) {
@@ -133,10 +223,7 @@ export default async function DashboardPage() {
   const distribution = (groups ?? [])
     .map((g) => ({ name: g.name, count: groupCounts[g.id] ?? 0 }))
     .sort((a, b) => b.count - a.count);
-  const scopedRole = currentProfile?.role as string | undefined;
-  const scopedGroupName = groups?.[0]?.name;
 
-  // Grafik pertumbuhan per rentang
   const byRange: Record<string, GrowthPoint[]> = {
     "7d": buildGrowth(athletes, 1),
     "30d": buildGrowth(athletes, 1),
@@ -146,50 +233,214 @@ export default async function DashboardPage() {
     all: buildGrowth(athletes, 12),
   };
 
+  const scopedRole = currentProfile?.role as string | undefined;
+  const isAdmin = scopedRole === "admin";
+  const firstName = (currentProfile?.full_name || "").split(" ")[0] || "Admin";
+
+  const quickActions = [
+    ...(isAdmin ? [{ href: "/atlet", label: "Tambah Atlet" }, { href: "/event-settings", label: "Buat Event" }] : []),
+    { href: "/events", label: "Tambah Pendaftaran" },
+    ...(isAdmin ? [{ href: "/keuangan", label: "Verifikasi Pembayaran" }, { href: "/accounts", label: "Buat Akun" }, { href: "/import-export", label: "Export Data" }] : []),
+  ];
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 pt-14 lg:pt-0">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-        {scopedRole === "ketua_kelompok" && <p className="text-sm font-medium text-brand-700">Ketua Kelompok — {scopedGroupName || "Kelompok belum ditugaskan"}</p>}
-        <p className="text-sm text-slate-500">
-          {DAY_NAMES[todayDow]},{" "}
-          {now.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
-        </p>
-      </div>
+      {/* Header */}
+      <header className="page-header !mb-0">
+        <div>
+          <p className="text-sm font-medium text-slate-500">
+            {greeting(now.getHours())}, {firstName}
+          </p>
+          <h1 className="page-title flex items-center gap-2">
+            TEAM CAKRA SWIMMING
+            <span aria-hidden className="hidden sm:inline-block h-2 w-2 rounded-full bg-brand-500" />
+          </h1>
+          <p className="page-subtitle">
+            {DAY_NAMES[todayDow]}, {now.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+            {scopedRole === "ketua_kelompok" && <> • <span className="font-medium text-brand-700">Ketua Kelompok</span></>}
+          </p>
+        </div>
+        {isAdmin && (
+          <Link href="/reports" className="btn-secondary text-sm">Laporan Center</Link>
+        )}
+      </header>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      {/* Quick actions */}
+      <nav aria-label="Aksi cepat" className="flex flex-wrap gap-2">
+        {quickActions.map((a) => (
+          <Link key={a.href + a.label} href={a.href} className="btn-secondary text-xs sm:text-sm">
+            <span aria-hidden className="text-brand-600 font-bold">+</span> {a.label}
+          </Link>
+        ))}
+      </nav>
+
+      {/* 8 KPI */}
+      <section aria-label="Ringkasan klub" className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatCard label="Total Atlet" value={totalAthletes} />
         <StatCard label="Atlet Aktif" value={activeAthletes} accent="text-emerald-600" />
-        <StatCard label="Baru Bulan Ini" value={`+${newThisMonth}`} accent="text-sky-600" hint={`${newThisYear} tahun ini`} />
-        <StatCard label="Keluar Bulan Ini" value={`−${leftThisMonth}`} accent="text-red-600" hint={`Net ${netGrowth >= 0 ? "+" : ""}${netGrowth}`} />
-      </div>
+        <StatCard label="Event Aktif" value={openEventCount} accent="text-brand-700" />
+        <StatCard label="Total Pendaftar" value={totalRegistrations} accent="text-navy-700" />
+        <StatCard label="Menunggu Pembayaran" value={unpaidCount} accent="text-red-600" />
+        <StatCard label="Menunggu Verifikasi" value={pendingCount} accent="text-amber-600" />
+        <StatCard label="Total Pembayaran" value={`${transactionCount} transaksi`} accent="text-sky-600" />
+        <StatCard label="Total Pendapatan" value={rupiah(totalRevenue)} accent="text-emerald-600" hint={`Tagihan ${rupiah(finBills)}`} />
+      </section>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatCard label="Sesi Hari Ini" value={todaySessions?.length ?? 0} accent="text-brand-700" />
-        <StatCard label="Hadir" value={present} accent="text-emerald-600" />
-        <StatCard label="Izin / Sakit" value={`${excused} / ${sick}`} accent="text-amber-600" />
-        <StatCard label="Tingkat Kehadiran" value={`${rate}%`} accent="text-brand-700" hint={`${absent} alpa`} />
-      </div>
+      {/* Financial + Activity */}
+      <section className="grid gap-4 lg:grid-cols-2">
+        <div className="card">
+          <h2 className="card-title">Financial Overview</h2>
+          <div className="mt-4 space-y-4">
+            {finRows.map((r) => (
+              <div key={r.label}>
+                <div className="mb-1 flex items-baseline justify-between text-sm">
+                  <span className="text-slate-600">{r.label}</span>
+                  <span className="font-semibold text-navy-900">{rupiah(r.value)}</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-slate-100" role="presentation">
+                  <div className={`h-full rounded-full ${r.tone}`} style={{ width: `${Math.round((r.value / finMax) * 100)}%` }} />
+                </div>
+              </div>
+            ))}
+            <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 text-center">
+              <div><p className="stat-label">Verifikasi</p><p className="text-lg font-bold text-amber-600">{statusCount("MENUNGGU_VERIFIKASI")}</p></div>
+              <div><p className="stat-label">Lunas</p><p className="text-lg font-bold text-brand-600">{statusCount("LUNAS")}</p></div>
+              <div><p className="stat-label">DP</p><p className="text-lg font-bold text-sky-600">{statusCount("DP")}</p></div>
+              <div><p className="stat-label">Belum Bayar</p><p className="text-lg font-bold text-red-600">{statusCount("BELUM_BAYAR")}</p></div>
+              <div><p className="stat-label">Ditolak</p><p className="text-lg font-bold text-slate-500">{statusCount("DITOLAK")}</p></div>
+              <div><p className="stat-label">Batal</p><p className="text-lg font-bold text-slate-400">{statusCount("CANCELLED")}</p></div>
+            </div>
+          </div>
+        </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatCard label="Event Aktif" value={activeEvents?.length ?? 0} accent="text-brand-700" />
-        <StatCard label="Menunggu Verifikasi" value={pendingPayments} accent="text-amber-600" />
-        <StatCard label="Belum Bayar" value={unpaidPayments} accent="text-red-600" />
-        <StatCard label="Uang Masuk Event" value={rupiah(totalEventPaid)} accent="text-emerald-600" hint={`Tagihan ${rupiah(totalEventBills)}`} />
-      </div>
+        <div className="card">
+          <div className="flex items-center justify-between">
+            <h2 className="card-title">Recent Activity</h2>
+            {isAdmin && <Link href="/audit" className="text-xs font-medium text-brand-700 hover:underline">Semua log</Link>}
+          </div>
+          {(auditLogs ?? []).length === 0 ? (
+            <p className="mt-4 text-sm text-slate-500">Belum ada aktivitas tercatat.</p>
+          ) : (
+            <ul className="mt-3 divide-y divide-slate-100">
+              {(auditLogs ?? []).map((l) => {
+                const actor = (l.profiles as { full_name?: string } | null)?.full_name ?? "System";
+                return (
+                  <li key={l.id} className="flex items-start gap-3 py-2.5">
+                    <span aria-hidden className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-slate-700">{ACTIVITY_LABELS[l.action] ?? l.action}</p>
+                      <p className="text-xs text-slate-400">{actor} • {new Date(l.created_at).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </section>
 
+      {/* Event overview */}
+      <section aria-label="Overview event" className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="card-title !text-base !normal-case !tracking-normal font-semibold text-navy-900">Event Overview</h2>
+          {isAdmin && <Link href="/event-settings" className="text-xs font-medium text-brand-700 hover:underline">Kelola event</Link>}
+        </div>
+        {eventRows.length === 0 ? (
+          <div className="empty-state">
+            <p className="empty-state-title">Belum ada event.</p>
+            {isAdmin && <Link href="/event-settings" className="btn-primary mt-2 text-sm">Buat Event Pertama</Link>}
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-3 md:grid-cols-2">
+              {openEvents.map((e) => (
+                <article key={e.id} className="card-flat border-l-4 !border-l-brand-500">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-navy-900">{e.name}</p>
+                      <p className="text-xs text-slate-500">
+                        {e.event_date}{e.location ? ` • ${e.location}` : ""}
+                        {e.registration_deadline ? ` • tutup ${e.registration_deadline}` : ""}
+                      </p>
+                    </div>
+                    <span className="badge-success badge shrink-0">OPEN</span>
+                  </div>
+                  <dl className="mt-3 grid grid-cols-4 gap-2 text-center">
+                    <div><dt className="stat-label">Pendaftar</dt><dd className="text-sm font-bold">{e.stat.regs}</dd></div>
+                    <div><dt className="stat-label">Masuk</dt><dd className="text-sm font-bold text-brand-600">{rupiah(e.stat.paid)}</dd></div>
+                    <div><dt className="stat-label">Belum</dt><dd className="text-sm font-bold text-red-600">{e.stat.unpaid}</dd></div>
+                    <div><dt className="stat-label">Verif.</dt><dd className="text-sm font-bold text-amber-600">{e.stat.pending}</dd></div>
+                  </dl>
+                  <div className="mt-3"><Link href={`/events/${e.id}`} className="btn-secondary px-3 py-1.5 text-xs">View Event</Link></div>
+                </article>
+              ))}
+              {openEvents.length === 0 && <p className="text-sm text-slate-500">Tidak ada event berstatus OPEN saat ini.</p>}
+            </div>
+            {otherEvents.length > 0 && (
+              <div className="table-wrap">
+                <table className="table !min-w-[560px]">
+                  <thead><tr><th>Event</th><th>Status</th><th>Tanggal</th><th>Pendaftar</th><th>Terbayar</th></tr></thead>
+                  <tbody>
+                    {otherEvents.slice(0, 6).map((e) => (
+                      <tr key={e.id}>
+                        <td className="max-w-[220px] truncate font-medium">{e.name}</td>
+                        <td><span className={`badge ${e.status === "DRAFT" ? "badge-neutral" : e.status === "CLOSED" ? "badge-warning" : "badge-info"}`}>{e.status}</span></td>
+                        <td className="whitespace-nowrap text-slate-500">{e.event_date}</td>
+                        <td>{e.stat.regs}</td>
+                        <td className="whitespace-nowrap">{rupiah(e.stat.paid)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      {/* Cakra overview */}
+      <section className="card overflow-x-auto">
+        <h2 className="card-title mb-3 !text-base !normal-case !tracking-normal font-semibold text-navy-900">Cakra Overview</h2>
+        {cakraRows.length === 0 ? (
+          <p className="text-sm text-slate-500">Belum ada data Cakra.</p>
+        ) : (
+          <table className="table !min-w-[760px]">
+            <thead><tr><th>Cakra</th><th>Atlet</th><th>Aktif</th><th>Pendaftaran</th><th>Tagihan</th><th>Masuk</th><th>Kehadiran*</th></tr></thead>
+            <tbody>
+              {cakraRows.map(([name, row]) => (
+                <tr key={name}>
+                  <td className="font-medium">{name}</td>
+                  <td>{row.athletes}</td>
+                  <td>{row.active}</td>
+                  <td>{row.registrations}</td>
+                  <td className="whitespace-nowrap">{rupiah(row.bills)}</td>
+                  <td className="whitespace-nowrap text-brand-700">{rupiah(row.paid)}</td>
+                  <td>{row.attTotal > 0 ? `${Math.round((row.attPresent / row.attTotal) * 100)}%` : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <p className="mt-2 text-xs text-slate-400">*Persentase hadir dari sesi latihan bulan ini.</p>
+      </section>
+
+      {/* Grafik existing */}
       <div className="grid gap-4 lg:grid-cols-2">
         <GrowthChart data={byRange["6m"]} byRange={byRange} />
         <GroupDistribution items={distribution} />
       </div>
 
-      <div className="card overflow-x-auto">
-        <div className="mb-3"><h2 className="text-lg font-semibold">Rekap per Cakra</h2><p className="text-sm text-slate-500">Ringkasan atlet dan transaksi event dari database.</p></div>
-        {cakraRows.length === 0 ? <p className="text-sm text-slate-500">Belum ada data Cakra.</p> : <table className="w-full min-w-[720px] text-sm"><thead><tr className="border-b text-left text-xs uppercase text-slate-500"><th className="px-3 py-2">Cakra</th><th className="px-3 py-2">Atlet</th><th className="px-3 py-2">Pendaftaran</th><th className="px-3 py-2">Tagihan</th><th className="px-3 py-2">Pembayaran</th><th className="px-3 py-2">Sisa</th></tr></thead><tbody className="divide-y">{cakraRows.map(([name, row]) => <tr key={name}><td className="px-3 py-2 font-medium">{name}</td><td className="px-3 py-2">{row.athletes}</td><td className="px-3 py-2">{row.registrations}</td><td className="px-3 py-2">{rupiah(row.bills)}</td><td className="px-3 py-2 text-emerald-700">{rupiah(row.paid)}</td><td className="px-3 py-2 text-amber-700">{rupiah(row.remaining)}</td></tr>)}</tbody></table>}
-      </div>
-
+      {/* Sesi hari ini + kehadiran */}
       <div className="card">
-        <h2 className="mb-3 text-lg font-semibold">Sesi Latihan Hari Ini</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="card-title !text-base !normal-case !tracking-normal font-semibold text-navy-900">Sesi Latihan Hari Ini</h2>
+          <div className="flex gap-2 text-xs">
+            <span className="badge-success badge">Hadir {present}</span>
+            <span className="badge-warning badge">Izin {excused} / Sakit {sick}</span>
+            <span className="badge-danger badge">Alpa {absent}</span>
+            <span className="badge-info badge">{rate}%</span>
+          </div>
+        </div>
         {(todaySchedules ?? []).length === 0 ? (
           <p className="text-sm text-slate-500">Tidak ada jadwal latihan hari ini.</p>
         ) : (
@@ -217,9 +468,6 @@ export default async function DashboardPage() {
             })}
           </ul>
         )}
-        <p className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-400">
-          Total atlet keluar (historis): {totalLeft}
-        </p>
       </div>
     </div>
   );
