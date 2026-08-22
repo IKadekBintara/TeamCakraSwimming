@@ -28,3 +28,52 @@
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
   }
 }
+
+html { color-scheme: light; }
+html.dark { color-scheme: dark; }
+body { transition: background-color 160ms ease, color 160ms ease; }
+
+/* Semantic dark surfaces for the existing utility-first UI. */
+.dark body { background-color: #0f172a; color: #e2e8f0; }
+.dark .bg-white { background-color: #172033; }
+.dark .bg-slate-50 { background-color: #0f172a; }
+.dark .bg-slate-100 { background-color: #1e293b; }
+.dark .bg-slate-200 { background-color: #334155; }
+.dark .border-slate-100 { border-color: #263449; }
+.dark .border-slate-200 { border-color: #334155; }
+.dark .border-slate-300 { border-color: #475569; }
+.dark .text-slate-900 { color: #f8fafc; }
+.dark .text-slate-800 { color: #f1f5f9; }
+.dark .text-slate-700 { color: #e2e8f0; }
+.dark .text-slate-600 { color: #cbd5e1; }
+.dark .text-slate-500 { color: #94a3b8; }
+.dark .text-slate-400 { color: #94a3b8; }
+.dark .text-brand-900 { color: #a7f3d0; }
+.dark .text-brand-800 { color: #6ee7b7; }
+.dark .text-brand-700 { color: #6ee7b7; }
+.dark .text-brand-600 { color: #34d399; }
+.dark .hover\:bg-slate-50:hover { background-color: #1e293b; }
+.dark .hover\:bg-slate-200:hover { background-color: #475569; }
+.dark .hover\:bg-brand-50:hover { background-color: #12352d; }
+.dark .bg-brand-50 { background-color: #12352d; }
+.dark .bg-brand-100 { background-color: #14532d; }
+.dark .bg-red-50 { background-color: #3f1d26; }
+.dark .bg-red-100 { background-color: #7f1d1d; }
+.dark .bg-amber-50 { background-color: #422006; }
+.dark .bg-amber-100 { background-color: #78350f; }
+.dark .bg-emerald-50 { background-color: #064e3b; }
+.dark .bg-emerald-100 { background-color: #065f46; }
+.dark .bg-sky-50 { background-color: #082f49; }
+.dark .bg-sky-100 { background-color: #0c4a6e; }
+.dark .text-red-700 { color: #fca5a5; }
+.dark .text-amber-700 { color: #fcd34d; }
+.dark .text-amber-800, .dark .text-amber-900 { color: #fde68a; }
+.dark .text-emerald-700 { color: #6ee7b7; }
+.dark .text-sky-700 { color: #7dd3fc; }
+.dark .input { background-color: #111827; color: #f8fafc; border-color: #475569; }
+.dark .input::placeholder { color: #94a3b8; }
+.dark select.input option { background-color: #172033; color: #f8fafc; }
+.dark .from-brand-50 { --tw-gradient-from: #022c22 var(--tw-gradient-from-position); --tw-gradient-to: rgb(2 44 34 / 0) var(--tw-gradient-to-position); }
+.dark .to-slate-50 { --tw-gradient-to: #0f172a var(--tw-gradient-to-position); }
+.dark input[type="checkbox"], .dark input[type="radio"] { accent-color: #10b981; }
+.dark .shadow-sm, .dark .shadow-lg { --tw-shadow-color: rgb(0 0 0 / 0.25); }

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { createClient, getSupabaseEnv } from "@/lib/supabase/client";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export const dynamic = "force-dynamic";
 
@@ -51,7 +52,8 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-brand-50 to-slate-50 p-4">
+    <main className="relative flex min-h-screen items-center justify-center bg-gradient-to-b from-brand-50 to-slate-50 p-4">
+      <div className="absolute right-4 top-4"><ThemeToggle compact /></div>
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center overflow-hidden">

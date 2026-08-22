@@ -8,6 +8,7 @@ import {
   LayoutDashboard, Users, UsersRound, CalendarDays, ClipboardCheck,
   BarChart3, FileSpreadsheet, UserCog, Settings, ScrollText, LogOut, CalendarRange, Wallet,
 } from "lucide-react";
+import ThemeToggle from "@/components/ThemeToggle";
 import type { Role } from "@/types";
 
 interface NavItem {
@@ -78,6 +79,7 @@ export default function Sidebar({ role, userName }: { role: Role; userName: stri
         <div className="border-t border-slate-100 p-3">
           <p className="mb-1 truncate px-2 text-xs text-slate-500">{userName}</p>
           <p className="mb-2 px-2 text-xs font-medium uppercase text-brand-700">{role}</p>
+          <div className="mb-2 px-2"><ThemeToggle compact /></div>
           <button onClick={logout} className="btn-secondary w-full text-sm">
             <LogOut className="h-4 w-4" /> Keluar
           </button>
@@ -94,9 +96,9 @@ export default function Sidebar({ role, userName }: { role: Role; userName: stri
             <p className="text-sm font-bold text-brand-900">TEAM CAKRA SWIMMING</p>
           </div>
         </div>
-        <button onClick={logout} className="text-sm font-medium text-brand-700">
+        <div className="flex items-center gap-2"><ThemeToggle compact /><button onClick={logout} className="text-sm font-medium text-brand-700">
           Keluar
-        </button>
+        </button></div>
       </div>
 
       {/* Mobile bottom nav — 5 item pertama sesuai role */}
