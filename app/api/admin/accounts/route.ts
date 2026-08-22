@@ -5,7 +5,8 @@ import type { Role } from "@/types";
 
 export const dynamic = "force-dynamic";
 
-const MANAGEABLE_ROLES: Role[] = ["admin", "coach", "parent"];
+const MANAGEABLE_ROLES: Role[] = ["admin", "coach", "parent", "ketua_kelompok", "group_leader"];
+const CREATABLE_ROLES: Role[] = ["admin", "coach", "parent", "ketua_kelompok"];
 const STATUSES = ["ACTIVE", "INACTIVE", "SUSPENDED", "DELETED"] as const;
 type AccountStatus = (typeof STATUSES)[number];
 
@@ -28,6 +29,21 @@ function validatePassword(password: unknown) {
   return typeof password === "string" && password.length >= 8 && /[A-Za-z]/.test(password) && /\d/.test(password);
 }
 
+async function assignLeaderGroup(service: ReturnType<typeof createServiceClient>, role: Role, userId: string, groupId: string | null) {
+  if (role === "ketua_kelompok") {
+    if (!groupId) throw new Error("Kelompok Cakra wajib dipilih untuk Ketua Kelompok");
+    const { data: group } = await service.from("training_groups").select("id, name, leader_id").eq("id", groupId).maybeSingle();
+    if (!group) throw new Error("Kelompok Cakra tidak ditemukan");
+    if (group.leader_id && group.leader_id !== userId) throw new Error(`${group.name} sudah memiliki Ketua Kelompok`);
+    await service.from("training_groups").update({ leader_id: null }).eq("leader_id", userId);
+    const { error } = await service.from("training_groups").update({ leader_id: userId }).eq("id", groupId);
+    if (error) throw error;
+    return;
+  }
+  if (role === "group_leader") return;
+  await service.from("training_groups").update({ leader_id: null }).eq("leader_id", userId);
+}
+
 async function syncRoleRecord(service: ReturnType<typeof createServiceClient>, role: Role, userId: string, fullName: string, phone: string | null) {
   if (role !== "coach" && role !== "parent") return;
   const table = role === "coach" ? "coaches" : "parents";
@@ -46,10 +62,11 @@ export async function GET(request: NextRequest) {
   const status = request.nextUrl.searchParams.get("status") || "ALL";
   const sort = request.nextUrl.searchParams.get("sort") || "newest";
 
-  const [{ data: profiles, error: profileError }, { data: authData, error: authError }, { data: recentActivity }] = await Promise.all([
+  const [{ data: profiles, error: profileError }, { data: authData, error: authError }, { data: recentActivity }, { data: groups }] = await Promise.all([
     service.from("profiles").select("id, full_name, role, phone, account_status, force_password_reset, created_at, updated_at").order("created_at", { ascending: false }),
     service.auth.admin.listUsers({ page: 1, perPage: 1000 }),
     service.from("audit_logs").select("id, action, entity_id, created_at, profiles(full_name)").in("action", ["CREATE_ACCOUNT", "UPDATE_ACCOUNT", "CHANGE_ROLE", "RESET_PASSWORD", "DISABLE_ACCOUNT", "ENABLE_ACCOUNT", "DELETE_ACCOUNT", "RESTORE_ACCOUNT"]).order("created_at", { ascending: false }).limit(8),
+    service.from("training_groups").select("id, name, leader_id, location, is_active").eq("is_active", true).order("name"),
   ]);
   if (profileError || authError) return responseError(profileError?.message || authError?.message || "Gagal membaca akun", 500);
 
@@ -68,6 +85,8 @@ export async function GET(request: NextRequest) {
       updated_at: p.updated_at || p.created_at,
       last_sign_in_at: authUser?.last_sign_in_at || null,
       email_confirmed_at: authUser?.email_confirmed_at || null,
+      group_id: groups?.find((g) => g.leader_id === p.id)?.id || null,
+      group_name: groups?.find((g) => g.leader_id === p.id)?.name || null,
     };
   }).filter((a) => {
     const matchesQ = !q || [a.full_name, a.email, a.phone].some((v) => (v || "").toLowerCase().includes(q));
@@ -90,8 +109,9 @@ export async function GET(request: NextRequest) {
     admin: all.filter((a) => a.role === "admin").length,
     coach: all.filter((a) => a.role === "coach").length,
     parent: all.filter((a) => a.role === "parent").length,
+    ketua: all.filter((a) => a.role === "ketua_kelompok").length,
   };
-  return NextResponse.json({ accounts, stats, recentActivity: recentActivity || [] });
+  return NextResponse.json({ accounts, stats, groups: groups || [], recentActivity: recentActivity || [] });
 }
 
 export async function POST(request: NextRequest) {
@@ -103,9 +123,16 @@ export async function POST(request: NextRequest) {
   const full_name = typeof body?.full_name === "string" ? body.full_name.trim() : "";
   const phone = typeof body?.phone === "string" ? body.phone.trim() : null;
   const role = body?.role as Role;
+  const group_id = typeof body?.group_id === "string" && body.group_id ? body.group_id : null;
   const password = body?.password;
   if (!full_name || !email || !email.includes("@")) return responseError("Nama dan email valid wajib diisi");
-  if (!MANAGEABLE_ROLES.includes(role)) return responseError("Role akun tidak diizinkan");
+  if (!CREATABLE_ROLES.includes(role)) return responseError("Role akun tidak diizinkan");
+  if (role === "ketua_kelompok" && !group_id) return responseError("Kelompok Cakra wajib dipilih untuk Ketua Kelompok");
+  if (group_id) {
+    const { data: targetGroup } = await ctx.service.from("training_groups").select("id, name, leader_id").eq("id", group_id).maybeSingle();
+    if (!targetGroup) return responseError("Kelompok Cakra tidak ditemukan");
+    if (targetGroup.leader_id) return responseError(`${targetGroup.name} sudah memiliki Ketua Kelompok`);
+  }
   if (!validatePassword(password)) return responseError("Password minimal 8 karakter dan harus mengandung huruf serta angka");
   const { data: created, error } = await ctx.service.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { full_name } });
   if (error || !created.user) return responseError(error?.message || "Gagal membuat akun", 400);
@@ -113,7 +140,8 @@ export async function POST(request: NextRequest) {
   const { error: profileError } = await ctx.service.from("profiles").update({ full_name, phone, role, account_status: "ACTIVE", force_password_reset: Boolean(body?.force_password_reset), updated_at: new Date().toISOString() }).eq("id", id);
   if (profileError) return responseError(profileError.message, 500);
   await syncRoleRecord(ctx.service, role, id, full_name, phone);
-  await ctx.service.from("audit_logs").insert({ actor_id: ctx.user.id, action: "CREATE_ACCOUNT", entity: "profiles", entity_id: id, new_value: { full_name, email, phone, role, account_status: "ACTIVE" } });
+  try { await assignLeaderGroup(ctx.service, role, id, group_id); } catch (e) { await ctx.service.auth.admin.deleteUser(id); return responseError(e instanceof Error ? e.message : "Gagal menetapkan kelompok", 400); }
+  await ctx.service.from("audit_logs").insert({ actor_id: ctx.user.id, action: "CREATE_ACCOUNT", entity: "profiles", entity_id: id, new_value: { full_name, email, phone, role, group_id, account_status: "ACTIVE" } });
   return NextResponse.json({ ok: true, id });
 }
 
@@ -153,12 +181,20 @@ export async function PATCH(request: NextRequest) {
 
   if (action === "update") {
     const nextRole = body.role as Role;
+    const group_id = typeof body.group_id === "string" && body.group_id ? body.group_id : null;
     if (!MANAGEABLE_ROLES.includes(nextRole)) return responseError("Role akun tidak diizinkan");
+    if (nextRole === "ketua_kelompok" && !group_id) return responseError("Kelompok Cakra wajib dipilih untuk Ketua Kelompok");
+    if (group_id) {
+      const { data: targetGroup } = await ctx.service.from("training_groups").select("id, name, leader_id").eq("id", group_id).maybeSingle();
+      if (!targetGroup) return responseError("Kelompok Cakra tidak ditemukan");
+      if (targetGroup.leader_id && targetGroup.leader_id !== id) return responseError(`${targetGroup.name} sudah memiliki Ketua Kelompok`);
+    }
     const patch: Record<string, unknown> = { full_name: String(body.full_name || "").trim(), phone: body.phone ? String(body.phone).trim() : null, role: nextRole, account_status: STATUSES.includes(body.account_status) ? body.account_status : oldProfile.account_status, force_password_reset: Boolean(body.force_password_reset), updated_at: new Date().toISOString() };
     if (!patch.full_name) return responseError("Nama wajib diisi");
     const { error } = await ctx.service.from("profiles").update(patch).eq("id", id);
     if (error) return responseError(error.message, 400);
     await syncRoleRecord(ctx.service, nextRole, id, String(patch.full_name), patch.phone as string | null);
+    try { await assignLeaderGroup(ctx.service, nextRole, id, group_id); } catch (e) { return responseError(e instanceof Error ? e.message : "Gagal menetapkan kelompok", 400); }
     if (body.email && body.email !== authUser.user.email) {
       const { error: authError } = await ctx.service.auth.admin.updateUserById(id, { email: String(body.email).trim().toLowerCase(), email_confirm: true });
       if (authError) return responseError(authError.message, 400);

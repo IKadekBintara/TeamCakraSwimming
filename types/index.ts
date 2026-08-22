@@ -1,6 +1,6 @@
 // Shared application types for Absensi Team Cakra Swimming
 
-export type Role = "admin" | "operator" | "coach" | "group_leader" | "athlete" | "parent";
+export type Role = "admin" | "operator" | "coach" | "group_leader" | "ketua_kelompok" | "athlete" | "parent";
 
 export type AthleteStatus = "ACTIVE" | "INACTIVE" | "LEFT_CLUB";
 
@@ -149,6 +149,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   operator: "Operator",
   coach: "Coach",
   group_leader: "Ketua Kelompok",
+  ketua_kelompok: "Ketua Kelompok",
   athlete: "Atlet",
   parent: "Orang Tua",
 };

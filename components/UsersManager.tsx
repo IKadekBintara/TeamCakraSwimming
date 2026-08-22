@@ -51,7 +51,7 @@ export default function UsersManager({
                   onChange={(e) => setRole(p.id, e.target.value as Role)}
                   className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
                 >
-                  {(Object.keys(ROLE_LABELS) as Role[]).map((r) => (
+                  {(Object.keys(ROLE_LABELS) as Role[]).filter((r) => r !== "ketua_kelompok").map((r) => (
                     <option key={r} value={r}>{ROLE_LABELS[r]}</option>
                   ))}
                 </select>

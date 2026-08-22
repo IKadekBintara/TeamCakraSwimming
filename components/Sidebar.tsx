@@ -17,16 +17,16 @@ interface NavItem {
   roles: Role[];
 }
 
-const ALL: Role[] = ["admin", "operator", "coach", "group_leader", "athlete", "parent"];
+const ALL: Role[] = ["admin", "operator", "coach", "group_leader", "ketua_kelompok", "athlete", "parent"];
 
 const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ALL },
   { href: "/atlet", label: "Atlet", icon: Users, roles: ALL },
-  { href: "/kelompok", label: "Kelompok Latihan", icon: UsersRound, roles: ["admin", "operator", "coach", "group_leader"] },
+  { href: "/kelompok", label: "Kelompok Latihan", icon: UsersRound, roles: ["admin", "operator", "coach", "group_leader", "ketua_kelompok"] },
   { href: "/jadwal", label: "Jadwal", icon: CalendarDays, roles: ALL },
   { href: "/events", label: "Events", icon: CalendarRange, roles: ALL },
-  { href: "/absensi", label: "Absensi", icon: ClipboardCheck, roles: ["admin", "operator", "coach", "group_leader"] },
-  { href: "/laporan", label: "Laporan", icon: BarChart3, roles: ["admin", "operator", "coach", "group_leader"] },
+  { href: "/absensi", label: "Absensi", icon: ClipboardCheck, roles: ["admin", "operator", "coach", "group_leader", "ketua_kelompok"] },
+  { href: "/laporan", label: "Laporan", icon: BarChart3, roles: ["admin", "operator", "coach", "group_leader", "ketua_kelompok"] },
   { href: "/keuangan", label: "Keuangan", icon: Wallet, roles: ["admin"] },
   { href: "/import-export", label: "Import / Export", icon: FileSpreadsheet, roles: ["admin", "operator"] },
   { href: "/users", label: "Users", icon: UserCog, roles: ["admin"] },

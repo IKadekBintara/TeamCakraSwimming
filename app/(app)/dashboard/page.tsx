@@ -51,6 +51,7 @@ export default async function DashboardPage() {
     { data: members },
     { data: activeEvents },
     { data: eventPayments },
+    { data: currentProfile },
   ] = await Promise.all([
     supabase.from("athletes").select("id, status, join_date, left_at"),
     supabase
@@ -61,6 +62,7 @@ export default async function DashboardPage() {
     supabase.from("training_group_members").select("group_id, athlete_id").is("left_at", null),
     supabase.from("events").select("id").eq("status", "OPEN"),
     supabase.from("event_payments").select("total_amount, amount_paid, payment_status"),
+    supabase.from("profiles").select("role").eq("id", (await supabase.auth.getUser()).data.user?.id ?? "").maybeSingle(),
   ]);
 
   const athletes = allAthletes ?? [];
@@ -112,6 +114,8 @@ export default async function DashboardPage() {
   const distribution = (groups ?? [])
     .map((g) => ({ name: g.name, count: groupCounts[g.id] ?? 0 }))
     .sort((a, b) => b.count - a.count);
+  const scopedRole = currentProfile?.role as string | undefined;
+  const scopedGroupName = groups?.[0]?.name;
 
   // Grafik pertumbuhan per rentang
   const byRange: Record<string, GrowthPoint[]> = {
@@ -127,6 +131,7 @@ export default async function DashboardPage() {
     <div className="mx-auto max-w-6xl space-y-6 pt-14 lg:pt-0">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
+        {scopedRole === "ketua_kelompok" && <p className="text-sm font-medium text-brand-700">Ketua Kelompok — {scopedGroupName || "Kelompok belum ditugaskan"}</p>}
         <p className="text-sm text-slate-500">
           {DAY_NAMES[todayDow]},{" "}
           {now.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
