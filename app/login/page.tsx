@@ -41,7 +41,7 @@ export default function LoginPage() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Terjadi kesalahan";
       if (msg.includes("Invalid login credentials")) {
-        setError("Email atau password salah. Akun test memakai format username@cakra.local (mis. admin@cakra.local).");
+        setError("Email atau password salah.");
       } else if (msg.includes("fetch") || msg.includes("network") || msg.includes("Failed")) {
         setError("Tidak bisa menghubungi Supabase. Cek NEXT_PUBLIC_SUPABASE_URL di .env.local dan koneksi internet.");
       } else {
@@ -56,8 +56,8 @@ export default function LoginPage() {
       <div className="absolute right-4 top-4"><ThemeToggle compact /></div>
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center overflow-hidden">
-            <Image src="/brand/team-cakra-logo.png" alt="Logo TEAM CAKRA SWIMMING" width={64} height={64} className="h-full w-full object-contain" priority />
+          <div className="mx-auto mb-4 flex h-28 w-28 items-center justify-center overflow-hidden sm:h-32 sm:w-32">
+            <Image src="/brand/team-cakra-logo.png" alt="Logo TEAM CAKRA SWIMMING" width={128} height={128} className="h-full w-full object-contain" priority />
           </div>
           <h1 className="text-xl font-bold tracking-tight text-brand-900">
             TEAM CAKRA SWIMMING
@@ -90,7 +90,7 @@ export default function LoginPage() {
               className="input"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@cakra.local"
+              placeholder="Email"
               autoComplete="email"
             />
           </div>
@@ -128,9 +128,6 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="mt-4 text-center text-xs text-slate-400">
-          Akun test: admin@cakra.local / Admin123! (setelah seed 0003 dijalankan)
-        </p>
       </div>
     </main>
   );
