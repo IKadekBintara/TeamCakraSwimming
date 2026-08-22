@@ -16,6 +16,11 @@ export async function GET(req: NextRequest) {
   const from = req.nextUrl.searchParams.get("from") ?? "2000-01-01";
   const to = req.nextUrl.searchParams.get("to") ?? "2100-01-01";
 
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+  if (!datePattern.test(from) || !datePattern.test(to) || from > to) {
+    return NextResponse.json({ error: "Invalid export date range" }, { status: 400 });
+  }
+
   const wb = XLSX.utils.book_new();
   let filename = "export.xlsx";
 
@@ -118,55 +123,99 @@ export async function GET(req: NextRequest) {
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(srows), "Jadwal");
     filename = `kelompok-jadwal-team-cakra.xlsx`;
-  } else if (kind === "event_registrations" || kind === "event_finance") {
+  } else if (kind === "event_registrations") {
+    const toExclusive = new Date(`${to}T00:00:00Z`);
+    toExclusive.setUTCDate(toExclusive.getUTCDate() + 1);
+    const { data: registrations, error: registrationsError } = await supabase
+      .from("event_registrations")
+      .select("id, event_id, athlete_id, ku, ku_override, status, created_at, athletes(full_name, gender, birth_date, cakra), events(name, event_date), event_registration_entries(race_id, price_snapshot)")
+      .gte("created_at", `${from}T00:00:00Z`)
+      .lt("created_at", toExclusive.toISOString())
+      .order("created_at");
+    if (registrationsError) {
+      console.error("event_registration_export_registrations_query", registrationsError);
+      return NextResponse.json({ error: "Failed to export event registrations" }, { status: 500 });
+    }
+
+    const registrationIds = (registrations ?? []).map((r) => r.id);
+    const { data: payments, error: paymentsError } = registrationIds.length
+      ? await supabase
+          .from("event_payments")
+          .select("registration_id, registration_fee, admin_fee, total_amount, payment_status")
+          .in("registration_id", registrationIds)
+      : { data: [], error: null };
+    if (paymentsError) {
+      console.error("event_registration_export_payments_query", paymentsError);
+      return NextResponse.json({ error: "Failed to export event registrations" }, { status: 500 });
+    }
+
+    const raceIds = (registrations ?? []).flatMap((r) =>
+      (Array.isArray(r.event_registration_entries) ? r.event_registration_entries : []).map((entry) => entry.race_id)
+    );
+    const { data: races, error: racesError } = raceIds.length
+      ? await supabase.from("event_races").select("id, name").in("id", raceIds)
+      : { data: [], error: null };
+    if (racesError) {
+      console.error("event_registration_export_races_query", racesError);
+      return NextResponse.json({ error: "Failed to export event registrations" }, { status: 500 });
+    }
+
+    const paymentByRegistration = new Map((payments ?? []).map((payment) => [payment.registration_id, payment]));
+    const raceById = new Map((races ?? []).map((race) => [race.id, race.name]));
+    const rows = (registrations ?? []).map((registration) => {
+      const athlete = Array.isArray(registration.athletes) ? registration.athletes[0] : registration.athletes;
+      const event = Array.isArray(registration.events) ? registration.events[0] : registration.events;
+      const payment = paymentByRegistration.get(registration.id);
+      const entries = Array.isArray(registration.event_registration_entries) ? registration.event_registration_entries : [];
+      return {
+        "ID Pendaftaran": registration.id,
+        "ID Atlet": registration.athlete_id,
+        "Nama": athlete?.full_name ?? "",
+        "PA/PI": athlete?.gender ?? "",
+        "Tanggal Lahir": athlete?.birth_date ?? "",
+        "Tahun Lahir": athlete?.birth_date ? String(athlete.birth_date).slice(0, 4) : "",
+        "KU": registration.ku_override || registration.ku || "",
+        "Cakra": athlete?.cakra ?? "",
+        "Event": event?.name ?? "",
+        "Tanggal Event": event?.event_date ?? "",
+        "Nomor Lomba": entries.map((entry) => raceById.get(entry.race_id) ?? "").filter(Boolean).join(", "),
+        "Harga Nomor": entries.reduce((sum, entry) => sum + Number(entry.price_snapshot || 0), 0),
+        "Admin": Number(payment?.admin_fee || 0),
+        "Total": Number(payment?.total_amount || 0),
+        "Status Pendaftaran": registration.status || "",
+        "Status Pembayaran": payment?.payment_status || "BELUM_BAYAR",
+        "Tanggal Pendaftaran": registration.created_at || "",
+      };
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Pendaftaran");
+    filename = "TEAM CAKRA — DATA PENDAFTARAN EVENT.xlsx";
+  } else if (kind === "event_finance") {
     const { data: payments, error } = await supabase
       .from("event_payments")
       .select("id, transaction_id, athlete_id, athlete_name, cakra, jumlah_nomor, registration_fee, admin_fee, total_amount, amount_paid, remaining_amount, payment_status, payment_method, payment_destination, submitted_at, verified_at, notes, events(name, event_date), event_registrations(ku, ku_override, event_registration_entries(event_races(name)), athletes(full_name, gender, birth_date))")
       .order("created_at");
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    if (kind === "event_registrations") {
-      const rows = (payments ?? []).map((p) => {
-        const reg = p.event_registrations as { ku?: string; ku_override?: string | null; event_registration_entries?: Array<{ event_races?: { name?: string } | null }>; athletes?: { full_name?: string; gender?: string | null; birth_date?: string | null } | null } | null;
-        return {
-          "ID": p.athlete_id,
-          "Nama": p.athlete_name,
-          "PA/PI": reg?.athletes?.gender ?? "",
-          "Tanggal Lahir": reg?.athletes?.birth_date ?? "",
-          "Tahun Lahir": reg?.athletes?.birth_date ? String(reg.athletes.birth_date).slice(0, 4) : "",
-          "KU": reg?.ku_override || reg?.ku || "",
-          "Cakra": p.cakra ?? "",
-          "Event": (p.events as { name?: string } | null)?.name ?? "",
-          "Nomor Lomba": (reg?.event_registration_entries ?? []).map((e) => e.event_races?.name).filter(Boolean).join(", "),
-          "Jumlah Nomor": p.jumlah_nomor,
-          "Status Pendaftaran": "REGISTERED",
-          "Catatan": p.notes ?? "",
-        };
-      });
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Pendaftaran");
-      filename = "TEAM CAKRA — DATA PENDAFTARAN DOLPHIN.xlsx";
-    } else {
-      const rows = (payments ?? []).map((p) => ({
-        "ID Transaksi": p.transaction_id,
-        "ID Atlet": p.athlete_id,
-        "Nama": p.athlete_name,
-        "Cakra": p.cakra ?? "",
-        "Event": (p.events as { name?: string } | null)?.name ?? "",
-        "Jumlah Nomor": p.jumlah_nomor,
-        "Uang Pendaftaran": p.registration_fee,
-        "Admin": p.admin_fee,
-        "Total Tagihan": p.total_amount,
-        "Sudah Dibayar": p.amount_paid,
-        "Sisa": p.remaining_amount,
-        "Status Pembayaran": p.payment_status,
-        "Metode Pembayaran": p.payment_method ?? "",
-        "Tujuan Pembayaran": p.payment_destination ?? "",
-        "Tanggal Bayar": p.submitted_at ?? "",
-        "Verified At": p.verified_at ?? "",
-        "Catatan": p.notes ?? "",
-      }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Keuangan");
-      filename = "TEAM CAKRA — KEUANGAN DOLPHIN.xlsx";
-    }
+    const rows = (payments ?? []).map((p) => ({
+      "ID Transaksi": p.transaction_id,
+      "ID Atlet": p.athlete_id,
+      "Nama": p.athlete_name,
+      "Cakra": p.cakra ?? "",
+      "Event": (p.events as { name?: string } | null)?.name ?? "",
+      "Jumlah Nomor": p.jumlah_nomor,
+      "Uang Pendaftaran": p.registration_fee,
+      "Admin": p.admin_fee,
+      "Total Tagihan": p.total_amount,
+      "Sudah Dibayar": p.amount_paid,
+      "Sisa": p.remaining_amount,
+      "Status Pembayaran": p.payment_status,
+      "Metode Pembayaran": p.payment_method ?? "",
+      "Tujuan Pembayaran": p.payment_destination ?? "",
+      "Tanggal Bayar": p.submitted_at ?? "",
+      "Verified At": p.verified_at ?? "",
+      "Catatan": p.notes ?? "",
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Keuangan");
+    filename = "TEAM CAKRA — KEUANGAN DOLPHIN.xlsx";
   } else {
     return NextResponse.json({ error: "Unknown export kind" }, { status: 400 });
   }
