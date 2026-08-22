@@ -222,7 +222,7 @@ export async function GET(req: NextRequest) {
     });
     log("stage=mapping.complete", { row_count: rows.length });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Pendaftaran");
-    filename = "TEAM CAKRA — DATA PENDAFTARAN EVENT.xlsx";
+    filename = "TEAM CAKRA - DATA PENDAFTARAN EVENT.xlsx";
   } else if (kind === "event_finance") {
     stage = "query.finance";
     const { data: payments, error } = await supabase
