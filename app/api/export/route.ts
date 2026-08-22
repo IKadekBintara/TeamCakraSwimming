@@ -1,30 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import * as XLSX from "xlsx";
 import { ATTENDANCE_LABELS, DAY_NAMES, STATUS_LABELS } from "@/types";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
+  const requestId = randomUUID();
+  let stage = "request";
+  const log = (message: string, details: Record<string, unknown> = {}) => {
+    console.info(`EXPORT_DEBUG ${requestId} ${message}`, details);
+  };
+
+  try {
+  stage = "auth";
+  log("stage=auth");
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  log("stage=auth.complete", { authenticated: Boolean(user), user_id: user?.id ?? null });
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "x-request-id": requestId } });
+
+  stage = "authorization";
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  log("stage=authorization.complete", { role: profile?.role ?? null, profile_query_error: profileError?.message ?? null });
 
   const kind = req.nextUrl.searchParams.get("kind") ?? "athletes";
   const from = req.nextUrl.searchParams.get("from") ?? "2000-01-01";
   const to = req.nextUrl.searchParams.get("to") ?? "2100-01-01";
+  log("stage=request.parsed", { kind, from, to });
 
   const datePattern = /^\d{4}-\d{2}-\d{2}$/;
   if (!datePattern.test(from) || !datePattern.test(to) || from > to) {
-    return NextResponse.json({ error: "Invalid export date range" }, { status: 400 });
+    log("stage=request.validation", { error: "Invalid export date range" });
+    return NextResponse.json({ error: "Invalid export date range" }, { status: 400, headers: { "x-request-id": requestId } });
   }
 
   const wb = XLSX.utils.book_new();
   let filename = "export.xlsx";
 
   if (kind === "athletes" || kind === "athletes_active" || kind === "athletes_left") {
+    stage = "query.athletes";
     let query = supabase
       .from("athletes")
       .select("full_name, nickname, birth_date, gender, school, grade, parent_name, whatsapp, address, program, cakra, status, join_date, left_at, left_reason")
@@ -67,6 +90,7 @@ export async function GET(req: NextRequest) {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Atlet");
     filename = `atlet-${kind === "athletes" ? "semua" : kind === "athletes_active" ? "aktif" : "keluar"}-team-cakra.xlsx`;
   } else if (kind === "attendance") {
+    stage = "query.attendance";
     const { data: sessions } = await supabase
       .from("training_sessions")
       .select("id, session_date, training_groups(name)")
@@ -96,6 +120,7 @@ export async function GET(req: NextRequest) {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Absensi");
     filename = `absensi-${from}_${to}.xlsx`;
   } else if (kind === "groups") {
+    stage = "query.groups";
     const { data } = await supabase
       .from("training_groups")
       .select("name, location, is_active, coaches(full_name), leader:leader_id(full_name)")
@@ -124,6 +149,8 @@ export async function GET(req: NextRequest) {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(srows), "Jadwal");
     filename = `kelompok-jadwal-team-cakra.xlsx`;
   } else if (kind === "event_registrations") {
+    stage = "query.registrations";
+    log("stage=query.registrations.start");
     const toExclusive = new Date(`${to}T00:00:00Z`);
     toExclusive.setUTCDate(toExclusive.getUTCDate() + 1);
     const { data: registrations, error: registrationsError } = await supabase
@@ -133,11 +160,13 @@ export async function GET(req: NextRequest) {
       .lt("created_at", toExclusive.toISOString())
       .order("created_at");
     if (registrationsError) {
-      console.error("event_registration_export_registrations_query", registrationsError);
-      return NextResponse.json({ error: "Failed to export event registrations" }, { status: 500 });
+      console.error(`EXPORT_DEBUG ${requestId} stage=query.registrations`, { error_name: registrationsError.name, error_message: registrationsError.message, error_code: registrationsError.code, details: registrationsError.details, hint: registrationsError.hint });
+      return NextResponse.json({ error: "Failed to export event registrations", request_id: requestId }, { status: 500, headers: { "x-request-id": requestId } });
     }
+    log("stage=query.registrations.complete", { row_count: registrations?.length ?? 0 });
 
     const registrationIds = (registrations ?? []).map((r) => r.id);
+    stage = "query.payments";
     const { data: payments, error: paymentsError } = registrationIds.length
       ? await supabase
           .from("event_payments")
@@ -145,21 +174,25 @@ export async function GET(req: NextRequest) {
           .in("registration_id", registrationIds)
       : { data: [], error: null };
     if (paymentsError) {
-      console.error("event_registration_export_payments_query", paymentsError);
-      return NextResponse.json({ error: "Failed to export event registrations" }, { status: 500 });
+      console.error(`EXPORT_DEBUG ${requestId} stage=query.payments`, { error_name: paymentsError.name, error_message: paymentsError.message, error_code: paymentsError.code, details: paymentsError.details, hint: paymentsError.hint });
+      return NextResponse.json({ error: "Failed to export event registrations", request_id: requestId }, { status: 500, headers: { "x-request-id": requestId } });
     }
+    log("stage=query.payments.complete", { row_count: payments?.length ?? 0 });
 
     const raceIds = (registrations ?? []).flatMap((r) =>
       (Array.isArray(r.event_registration_entries) ? r.event_registration_entries : []).map((entry) => entry.race_id)
     );
+    stage = "query.races";
     const { data: races, error: racesError } = raceIds.length
       ? await supabase.from("event_races").select("id, name").in("id", raceIds)
       : { data: [], error: null };
     if (racesError) {
-      console.error("event_registration_export_races_query", racesError);
-      return NextResponse.json({ error: "Failed to export event registrations" }, { status: 500 });
+      console.error(`EXPORT_DEBUG ${requestId} stage=query.races`, { error_name: racesError.name, error_message: racesError.message, error_code: racesError.code, details: racesError.details, hint: racesError.hint });
+      return NextResponse.json({ error: "Failed to export event registrations", request_id: requestId }, { status: 500, headers: { "x-request-id": requestId } });
     }
+    log("stage=query.races.complete", { row_count: races?.length ?? 0 });
 
+    stage = "mapping";
     const paymentByRegistration = new Map((payments ?? []).map((payment) => [payment.registration_id, payment]));
     const raceById = new Map((races ?? []).map((race) => [race.id, race.name]));
     const rows = (registrations ?? []).map((registration) => {
@@ -187,9 +220,11 @@ export async function GET(req: NextRequest) {
         "Tanggal Pendaftaran": registration.created_at || "",
       };
     });
+    log("stage=mapping.complete", { row_count: rows.length });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Pendaftaran");
     filename = "TEAM CAKRA — DATA PENDAFTARAN EVENT.xlsx";
   } else if (kind === "event_finance") {
+    stage = "query.finance";
     const { data: payments, error } = await supabase
       .from("event_payments")
       .select("id, transaction_id, athlete_id, athlete_name, cakra, jumlah_nomor, registration_fee, admin_fee, total_amount, amount_paid, remaining_amount, payment_status, payment_method, payment_destination, submitted_at, verified_at, notes, events(name, event_date), event_registrations(ku, ku_override, event_registration_entries(event_races(name)), athletes(full_name, gender, birth_date))")
@@ -217,14 +252,26 @@ export async function GET(req: NextRequest) {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Keuangan");
     filename = "TEAM CAKRA — KEUANGAN DOLPHIN.xlsx";
   } else {
-    return NextResponse.json({ error: "Unknown export kind" }, { status: 400 });
+    log("stage=request.validation", { error: "Unknown export kind" });
+    return NextResponse.json({ error: "Unknown export kind" }, { status: 400, headers: { "x-request-id": requestId } });
   }
 
+  stage = "excel";
   const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
-  return new NextResponse(new Uint8Array(buf), {
+  log("stage=excel.complete", { bytes: buf.length, filename });
+  stage = "response";
+  const response = new NextResponse(new Uint8Array(buf), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${filename}"`,
+      "x-request-id": requestId,
     },
   });
+  log("stage=response.complete", { status: 200 });
+  return response;
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error(`EXPORT_DEBUG ${requestId} stage=${stage}`, { error_name: err.name, error_message: err.message, stack: err.stack });
+    return NextResponse.json({ error: "Export failed", request_id: requestId }, { status: 500, headers: { "x-request-id": requestId } });
+  }
 }
