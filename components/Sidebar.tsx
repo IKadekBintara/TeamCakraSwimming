@@ -30,6 +30,7 @@ const NAV: NavItem[] = [
   { href: "/keuangan", label: "Keuangan", icon: Wallet, roles: ["admin"] },
   { href: "/import-export", label: "Import / Export", icon: FileSpreadsheet, roles: ["admin", "operator"] },
   { href: "/users", label: "Users", icon: UserCog, roles: ["admin"] },
+  { href: "/accounts", label: "Account Management", icon: UserCog, roles: ["admin"] },
   { href: "/settings", label: "Settings", icon: Settings, roles: ["admin"] },
   { href: "/audit", label: "Audit Logs", icon: ScrollText, roles: ["admin"] },
 ];

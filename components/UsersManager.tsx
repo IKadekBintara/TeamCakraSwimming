@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { ROLE_LABELS, type Role } from "@/types";
 
 export default function UsersManager({
@@ -11,23 +10,16 @@ export default function UsersManager({
   profiles: { id: string; full_name: string; role: Role; phone: string | null }[];
 }) {
   const router = useRouter();
-  const supabase = createClient();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function setRole(userId: string, role: Role, oldRole: Role) {
+  async function setRole(userId: string, role: Role) {
     setBusy(userId);
     setError(null);
     try {
-      const { error } = await supabase.from("profiles").update({ role }).eq("id", userId);
-      if (error) throw error;
-      await supabase.from("audit_logs").insert({
-        action: "change_role",
-        entity: "profiles",
-        entity_id: userId,
-        old_value: { role: oldRole },
-        new_value: { role },
-      });
+      const res = await fetch("/api/admin/accounts", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: userId, action: "update", full_name: profiles.find((p) => p.id === userId)?.full_name || "", role, phone: profiles.find((p) => p.id === userId)?.phone || null, account_status: "ACTIVE" }) });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Gagal mengubah role");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal mengubah role");
@@ -56,7 +48,7 @@ export default function UsersManager({
                 <select
                   value={p.role}
                   disabled={busy === p.id}
-                  onChange={(e) => setRole(p.id, e.target.value as Role, p.role)}
+                  onChange={(e) => setRole(p.id, e.target.value as Role)}
                   className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
                 >
                   {(Object.keys(ROLE_LABELS) as Role[]).map((r) => (

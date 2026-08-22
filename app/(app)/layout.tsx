@@ -22,11 +22,13 @@ export default async function AppLayout({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, role")
+    .select("full_name, role, account_status")
     .eq("id", user.id)
     .single();
 
-  const role: Role = (profile?.role as Role) ?? "parent";
+  if (!profile || ["INACTIVE", "SUSPENDED", "DELETED"].includes(profile.account_status)) redirect("/login?error=account_inactive");
+
+  const role: Role = (profile.role as Role) ?? "parent";
   const name = profile?.full_name || user.email || "Pengguna";
 
   return (
