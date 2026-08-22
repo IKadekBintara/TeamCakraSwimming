@@ -161,7 +161,7 @@ create policy payments_parent_read on public.event_payments for select using (at
 create policy payments_athlete_read on public.event_payments for select using (athlete_id = public.my_athlete_id());
 create policy payments_parent_insert_pending on public.event_payments for insert with check (
   athlete_id in (select public.parent_athlete_ids())
-  and payment_status = 'MENUNGGU_VERIFIKASI'
+  and payment_status in ('BELUM_BAYAR', 'MENUNGGU_VERIFIKASI')
   and verified_by is null
 );
 
