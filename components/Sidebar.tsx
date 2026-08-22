@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -58,8 +59,8 @@ export default function Sidebar({ role, userName }: { role: Role; userName: stri
       {/* Desktop sidebar */}
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-slate-200 bg-white lg:flex">
         <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-white">
-            <Waves className="h-5 w-5" />
+          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-slate-950">
+            <Image src="/brand/team-cakra-logo.png" alt="Logo Team Cakra Swimming Club" width={40} height={40} className="h-full w-full object-cover" priority />
           </div>
           <div className="leading-tight">
             <p className="text-sm font-bold text-brand-900">TEAM CAKRA</p>
@@ -86,8 +87,8 @@ export default function Sidebar({ role, userName }: { role: Role; userName: stri
       {/* Mobile top bar */}
       <div className="fixed inset-x-0 top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 lg:hidden">
         <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white">
-            <Waves className="h-4 w-4" />
+          <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg bg-slate-950">
+            <Image src="/brand/team-cakra-logo.png" alt="Logo Team Cakra Swimming Club" width={32} height={32} className="h-full w-full object-cover" />
           </span>
           <div className="leading-tight">
             <p className="text-sm font-bold text-brand-900">TEAM CAKRA</p>

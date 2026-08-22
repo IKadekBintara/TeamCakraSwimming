@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { createClient, getSupabaseEnv } from "@/lib/supabase/client";
 
@@ -53,8 +54,8 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-brand-50 to-slate-50 p-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-600 text-2xl text-white shadow-lg">
-            🏊
+          <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-slate-950 shadow-lg">
+            <Image src="/brand/team-cakra-logo.png" alt="Logo Team Cakra Swimming Club" width={64} height={64} className="h-full w-full object-cover" priority />
           </div>
           <h1 className="text-xl font-bold tracking-tight text-brand-900">
             TEAM CAKRA
