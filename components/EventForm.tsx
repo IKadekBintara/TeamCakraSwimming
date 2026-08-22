@@ -40,7 +40,7 @@ export default function EventForm() {
       <label className="label sm:col-span-2">Lokasi<input className="input" value={form.location} onChange={(e) => set("location", e.target.value)} /></label>
       <label className="label">Biaya / nomor<input className="input" required min="0" type="number" value={form.fee_per_entry} onChange={(e) => set("fee_per_entry", e.target.value)} /></label>
       <label className="label">Biaya admin / nomor<input className="input" required min="0" type="number" value={form.admin_fee} onChange={(e) => set("admin_fee", e.target.value)} /></label>
-      <label className="label sm:col-span-2">Status<select className="input" value={form.status} onChange={(e) => set("status", e.target.value)}><option>DRAFT</option><option>OPEN</option><option>CLOSED</option></select></label>
+      <label className="label sm:col-span-2">Status<select className="input" value={form.status} onChange={(e) => set("status", e.target.value)}><option>DRAFT</option><option>OPEN</option><option>CLOSED</option><option>ARCHIVED</option></select></label>
       <label className="label sm:col-span-2">Deskripsi<textarea className="input" rows={3} value={form.description} onChange={(e) => set("description", e.target.value)} /></label>
     </div>
     {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

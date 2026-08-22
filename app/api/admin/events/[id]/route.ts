@@ -12,6 +12,7 @@ async function admin() {
   if (profile?.role !== "admin" || profile.account_status !== "ACTIVE") return { error: 403 as const };
   return { user, service: createServiceClient() };
 }
+const EVENT_STATUSES = new Set(["DRAFT", "OPEN", "CLOSED", "ARCHIVED"]);
 function fail(message: string, status = 400) { return NextResponse.json({ error: message }, { status }); }
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
@@ -30,6 +31,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   const action = body?.action;
   if (action === "event") {
     if (!String(body.name || "").trim() || !body.event_date) return fail("Nama event dan tanggal wajib diisi");
+    if (!EVENT_STATUSES.has(String(body.status))) return fail("Status event tidak valid");
     if (body.registration_deadline && body.registration_deadline > body.event_date) return fail("Deadline tidak boleh setelah tanggal event");
     const patch = { name: String(body.name).trim(), event_date: body.event_date, location: body.location || null, description: body.description || null, registration_deadline: body.registration_deadline || null, status: body.status, admin_fee: Number(body.admin_fee || 0), contact_person: body.contact_person || null, contact_whatsapp: body.contact_whatsapp || null, payment_instructions: body.payment_instructions || null, updated_at: new Date().toISOString() };
     if (patch.admin_fee < 0) return fail("Biaya admin tidak boleh negatif");
