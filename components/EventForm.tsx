@@ -38,8 +38,7 @@ export default function EventForm() {
       <label className="label">Tanggal<input className="input" required type="date" value={form.event_date} onChange={(e) => set("event_date", e.target.value)} /></label>
       <label className="label">Deadline<input className="input" type="date" value={form.registration_deadline} onChange={(e) => set("registration_deadline", e.target.value)} /></label>
       <label className="label sm:col-span-2">Lokasi<input className="input" value={form.location} onChange={(e) => set("location", e.target.value)} /></label>
-      <label className="label">Biaya / nomor<input className="input" required min="0" type="number" value={form.fee_per_entry} onChange={(e) => set("fee_per_entry", e.target.value)} /></label>
-      <label className="label">Biaya admin / nomor<input className="input" required min="0" type="number" value={form.admin_fee} onChange={(e) => set("admin_fee", e.target.value)} /></label>
+      <label className="label">Biaya admin event<input className="input" required min="0" type="number" value={form.admin_fee} onChange={(e) => set("admin_fee", e.target.value)} /></label>
       <label className="label sm:col-span-2">Status<select className="input" value={form.status} onChange={(e) => set("status", e.target.value)}><option>DRAFT</option><option>OPEN</option><option>CLOSED</option><option>ARCHIVED</option></select></label>
       <label className="label sm:col-span-2">Deskripsi<textarea className="input" rows={3} value={form.description} onChange={(e) => set("description", e.target.value)} /></label>
     </div>
