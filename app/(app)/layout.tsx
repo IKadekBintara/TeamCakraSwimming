@@ -1,7 +1,12 @@
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import type { Role } from "@/types";
+
+export const metadata: Metadata = {
+  title: "Dashboard",
+};
 
 export default async function AppLayout({
   children,

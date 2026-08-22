@@ -1,8 +1,8 @@
 {
-  "name": "absensi-team-cakra-swimming",
+  "name": "team-cakra-swimming",
   "version": "0.1.0",
   "private": true,
-  "description": "Project Absensi Team Cakra Swimming - TEAM CAKRA SWIMMING CLUB",
+  "description": "TEAM CAKRA SWIMMING management system",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

@@ -54,14 +54,13 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-brand-50 to-slate-50 p-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-slate-950 shadow-lg">
-            <Image src="/brand/team-cakra-logo.png" alt="Logo Team Cakra Swimming Club" width={64} height={64} className="h-full w-full object-cover" priority />
+          <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center overflow-hidden">
+            <Image src="/brand/team-cakra-logo.png" alt="Logo TEAM CAKRA SWIMMING" width={64} height={64} className="h-full w-full object-contain" priority />
           </div>
           <h1 className="text-xl font-bold tracking-tight text-brand-900">
-            TEAM CAKRA
+            TEAM CAKRA SWIMMING
           </h1>
-          <p className="text-sm font-medium text-brand-700">SWIMMING CLUB</p>
-          <p className="mt-1 text-xs text-slate-500">ABSENSI TEAM CAKRA SWIMMING</p>
+          <p className="mt-1 text-xs text-slate-500">SISTEM MANAJEMEN ATLET, ABSENSI, EVENT, DAN PEMBAYARAN</p>
         </div>
 
         {!configured && (

@@ -2,8 +2,16 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Absensi Team Cakra Swimming",
-  description: "Sistem absensi dan manajemen atlet TEAM CAKRA SWIMMING CLUB",
+  title: {
+    default: "Team Cakra Swimming",
+    template: "%s — Team Cakra Swimming",
+  },
+  description: "TEAM CAKRA SWIMMING — sistem manajemen atlet, absensi, event, pendaftaran, dan pembayaran.",
+  icons: {
+    icon: "/brand/team-cakra-logo.png",
+    shortcut: "/brand/team-cakra-logo.png",
+    apple: "/brand/team-cakra-logo.png",
+  },
 };
 
 export const viewport: Viewport = {

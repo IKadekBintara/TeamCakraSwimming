@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   LayoutDashboard, Users, UsersRound, CalendarDays, ClipboardCheck,
-  BarChart3, FileSpreadsheet, UserCog, Settings, ScrollText, Waves, LogOut, CalendarRange, Wallet,
+  BarChart3, FileSpreadsheet, UserCog, Settings, ScrollText, LogOut, CalendarRange, Wallet,
 } from "lucide-react";
 import type { Role } from "@/types";
 
@@ -59,12 +59,11 @@ export default function Sidebar({ role, userName }: { role: Role; userName: stri
       {/* Desktop sidebar */}
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-slate-200 bg-white lg:flex">
         <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-4">
-          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-slate-950">
-            <Image src="/brand/team-cakra-logo.png" alt="Logo Team Cakra Swimming Club" width={40} height={40} className="h-full w-full object-cover" priority />
+          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl">
+            <Image src="/brand/team-cakra-logo.png" alt="Logo TEAM CAKRA SWIMMING" width={40} height={40} className="h-full w-full object-contain" priority />
           </div>
           <div className="leading-tight">
-            <p className="text-sm font-bold text-brand-900">TEAM CAKRA</p>
-            <p className="text-xs font-medium text-brand-600">SWIMMING CLUB</p>
+            <p className="text-sm font-bold text-brand-900">TEAM CAKRA SWIMMING</p>
           </div>
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto p-3">
@@ -87,12 +86,11 @@ export default function Sidebar({ role, userName }: { role: Role; userName: stri
       {/* Mobile top bar */}
       <div className="fixed inset-x-0 top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 lg:hidden">
         <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg bg-slate-950">
-            <Image src="/brand/team-cakra-logo.png" alt="Logo Team Cakra Swimming Club" width={32} height={32} className="h-full w-full object-cover" />
+          <span className="flex h-8 w-8 items-center justify-center overflow-hidden">
+            <Image src="/brand/team-cakra-logo.png" alt="Logo TEAM CAKRA SWIMMING" width={32} height={32} className="h-full w-full object-contain" />
           </span>
           <div className="leading-tight">
-            <p className="text-sm font-bold text-brand-900">TEAM CAKRA</p>
-            <p className="text-[10px] font-medium text-brand-600">SWIMMING CLUB</p>
+            <p className="text-sm font-bold text-brand-900">TEAM CAKRA SWIMMING</p>
           </div>
         </div>
         <button onClick={logout} className="text-sm font-medium text-brand-700">

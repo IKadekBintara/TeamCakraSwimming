@@ -1,6 +1,6 @@
-# Absensi Team Cakra Swimming
+# TEAM CAKRA SWIMMING
 
-Sistem absensi & manajemen atlet **TEAM CAKRA SWIMMING CLUB**.
+Sistem manajemen atlet, absensi, event, pendaftaran, pembayaran, dan laporan **TEAM CAKRA SWIMMING**.
 
 ## Tech Stack
 

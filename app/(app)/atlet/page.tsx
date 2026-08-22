@@ -58,7 +58,7 @@ export default async function AtletPage({
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Atlet</h1>
-          <p className="text-sm text-slate-500">Semua atlet Team Cakra Swimming</p>
+          <p className="text-sm text-slate-500">Semua atlet TEAM CAKRA SWIMMING</p>
         </div>
         <Link href="/atlet/tambah" className="btn-primary shrink-0">
           + Tambah Atlet
