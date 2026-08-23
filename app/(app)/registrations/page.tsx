@@ -43,27 +43,34 @@ export default async function RegistrationsPage({
   ]);
   const kuOptions = Array.from(new Set((kus ?? []).map((k) => k.ku))).filter(Boolean).sort();
 
-  // Query utama
+  // Query utama — KU hidup di event_registrations (bukan event_payments).
   let query = supabase
     .from("event_payments")
-    .select("id, transaction_id, athlete_id, athlete_name, cakra, ku, total_amount, amount_paid, remaining_amount, payment_status, payment_method, created_at, event:events(id,name), registration:event_registrations(status)", { count: "exact" })
+    .select("id, transaction_id, registration_id, athlete_id, athlete_name, cakra, total_amount, amount_paid, remaining_amount, payment_status, payment_method, created_at, event:events(id,name), registration:event_registrations(ku,status)", { count: "exact" })
     .order("created_at", { ascending: false })
     .range(from, from + PAGE_SIZE - 1);
   if (q) query = query.ilike("athlete_name", `%${q}%`);
   if (fEvent !== "ALL") query = query.eq("event_id", fEvent);
   if (fCakra !== "ALL") query = query.eq("cakra", fCakra);
-  if (fKu !== "ALL") query = query.eq("ku", fKu);
+  if (fKu !== "ALL") query = query.eq("registration.ku", fKu);
   if (fPay !== "ALL") query = query.eq("payment_status", fPay);
   const { data: rows, count } = await query;
 
-  // Filter race dilakukan via entries (join table)
+  // Filter race dilakukan via entries → event_registrations.payment_id → event_payments.id
   let raceFilteredIds: Set<string> | null = null;
   if (fRace !== "ALL") {
     const { data: entries } = await supabase
       .from("event_registration_entries")
-      .select("registration_id")
+      .select("registration:event_registrations(payment_id)")
       .eq("race_id", fRace);
-    raceFilteredIds = new Set((entries ?? []).map((e) => e.registration_id));
+    raceFilteredIds = new Set(
+      (entries ?? [])
+        .map((e) => {
+          const reg = e.registration as unknown;
+          return Array.isArray(reg) ? reg[0]?.payment_id : (reg as { payment_id?: string } | null)?.payment_id;
+        })
+        .filter((x): x is string => typeof x === "string")
+    );
   }
   const filtered = raceFilteredIds ? (rows ?? []).filter((r) => raceFilteredIds!.has(r.id)) : rows ?? [];
 
@@ -145,7 +152,8 @@ export default async function RegistrationsPage({
             <tbody>
               {filtered.map((r) => {
                 const ev = r.event as { id?: string; name?: string } | null;
-                const reg = r.registration as { status?: string } | null;
+                const reg = r.registration as { ku?: string; status?: string } | null;
+                const regKu = reg?.ku ?? "";
                 return (
                   <tr key={r.id}>
                     <td>
@@ -159,7 +167,7 @@ export default async function RegistrationsPage({
                       {reg?.status && <span className="ml-1 text-xs text-slate-400">({reg.status})</span>}
                     </td>
                     <td>{r.cakra || "—"}</td>
-                    <td>{r.ku}</td>
+                    <td>{regKu || "—"}</td>
                     <td className="whitespace-nowrap font-medium">{rupiah(r.total_amount)}</td>
                     <td className="whitespace-nowrap text-brand-700">{rupiah(r.amount_paid)}</td>
                     <td><span className={badgeClass(r.payment_status)}>{paymentStatusLabel(r.payment_status as PaymentStatus)}</span></td>
