@@ -117,6 +117,24 @@ export default function AthleteForm({
         await syncMembership(athleteId, form.group_id);
       }
 
+      // Siapkan akun login atlet secara otomatis (hanya berhasil bila pembuat adalah admin;
+      // selain admin dibiarkan mengisi lewat "Sinkronkan/Buat Akun" di halaman detail).
+      if (mode === "create") {
+        try {
+          const res = await fetch("/api/admin/athlete-accounts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ athlete_id: athleteId }),
+          });
+          if (!res.ok && res.status !== 403) {
+            const data = await res.json().catch(() => null);
+            setError(data?.error ? `Atlet tersimpan, tetapi akun belum dibuat: ${data.error}` : "Atlet tersimpan. Akun dapat dibuat dari halaman detail atlet.");
+          }
+        } catch {
+          // Non-blocking: akun tetap bisa dibuat manual dari detail atlet.
+        }
+      }
+
       router.push(`/atlet/${athleteId}`);
       router.refresh();
     } catch (err) {

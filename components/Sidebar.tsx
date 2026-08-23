@@ -28,14 +28,25 @@ interface NavSection {
 const ALL: Role[] = ["admin", "operator", "coach", "group_leader", "ketua_kelompok", "athlete", "parent"];
 const STAFF: Role[] = ["admin", "operator", "coach", "group_leader", "ketua_kelompok"];
 const ADMIN: Role[] = ["admin"];
+/** Menu khusus atlet (dan orang tua yang menamping akun atletnya). */
+const ATLET: Role[] = ["athlete", "parent"];
 
 /** Menu dikelompokkan per kategori agar mudah dipindai; tidak ada menu yang dihilangkan. */
 const NAV_SECTIONS: NavSection[] = [
   { items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ALL }] },
   {
+    label: "Akun Saya",
+    items: [
+      { href: "/profil-saya", label: "Profil Saya", icon: Users, roles: ATLET },
+      { href: "/absensi-saya", label: "Absensi Saya", icon: ClipboardCheck, roles: ATLET },
+      { href: "/performance-saya", label: "Performance Saya", icon: Timer, roles: ATLET },
+      { href: "/pembayaran-saya", label: "Pembayaran Saya", icon: Wallet, roles: ATLET },
+    ],
+  },
+  {
     label: "Operasional",
     items: [
-      { href: "/atlet", label: "Atlet", icon: Users, roles: ALL },
+      { href: "/atlet", label: "Atlet", icon: Users, roles: STAFF },
       { href: "/kelompok", label: "Kelompok Latihan", icon: UsersRound, roles: STAFF },
       { href: "/jadwal", label: "Jadwal", icon: CalendarDays, roles: ALL },
       { href: "/absensi", label: "Absensi", icon: ClipboardCheck, roles: STAFF },

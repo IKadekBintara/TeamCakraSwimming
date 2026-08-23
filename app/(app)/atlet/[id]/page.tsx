@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ATTENDANCE_LABELS, STATUS_LABELS, waLink, mapsLink } from "@/types";
 import AthleteStatusActions from "@/components/AthleteStatusActions";
+import AthleteAccountPanel from "@/components/AthleteAccountPanel";
 import AthletePerformance from "@/components/AthletePerformance";
 import PerformanceResultForm from "@/components/PerformanceResultForm";
 import type { PerfResult } from "@/lib/performance";
@@ -27,6 +28,13 @@ export default async function AtletDetailPage({
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", (await supabase.auth.getUser()).data.user?.id ?? "").maybeSingle();
   const role = profile?.role ?? "parent";
   const canManagePerf = role === "admin" || role === "operator" || role === "coach" || role === "group_leader" || role === "ketua_kelompok";
+
+  // Ownership validation: atlet/parent hanya boleh membuka profilnya sendiri.
+  // (Staff bebas; atlet lain sudah tersaring RLS, ini lapisan halaman.)
+  if (!canManagePerf && role !== "parent") {
+    const mine = await supabase.from("athletes").select("id").limit(1).maybeSingle();
+    if (mine.data?.id !== athlete.id) notFound();
+  }
 
   const [{ data: membership }, { data: attendance }, { data: history }, { data: eventRegs }, { data: perfRows }, { data: perfEvents }] = await Promise.all([
     supabase
@@ -118,6 +126,26 @@ export default async function AtletDetailPage({
           </Link>
         </div>
       </div>
+
+      {(athlete.status === "LEFT_CLUB" || athlete.status === "INACTIVE") && (
+        <div className="card border-amber-300 bg-amber-50/60">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold text-amber-900">⚠ ATLET SUDAH KELUAR</h2>
+              <p className="mt-0.5 text-sm text-amber-800">
+                Tanggal keluar: {athlete.left_at ?? "—"}
+                {athlete.left_reason ? ` · Alasan: ${athlete.left_reason}` : ""}
+              </p>
+              <p className="text-xs text-amber-700">
+                Akun login dinonaktifkan dan sesi dicabut. Seluruh data historis di bawah tetap tersimpan dan dapat dibuka.
+              </p>
+            </div>
+            <AthleteStatusActions athleteId={athlete.id} status={athlete.status} />
+          </div>
+        </div>
+      )}
+
+      {role === "admin" && <AthleteAccountPanel athleteId={athlete.id} />}
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="card space-y-2">

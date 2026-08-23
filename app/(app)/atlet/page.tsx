@@ -1,7 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { STATUS_LABELS } from "@/types";
 import { CAKRA_GROUPS, calculateDolphinKu } from "@/lib/events";
+import { getProfile } from "@/lib/page-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +26,10 @@ export default async function AtletPage({
 }: {
   searchParams: { q?: string; status?: string; cakra?: string; ku?: string; sort?: string; page?: string };
 }) {
+  // Atlet/parent tidak melihat daftar seluruh atlet — diarahkan ke halaman pribadi.
+  const viewer = await getProfile();
+  if (!["admin", "operator", "coach", "group_leader", "ketua_kelompok"].includes((viewer?.role as string) ?? "")) redirect("/profil-saya");
+
   const supabase = createClient();
   const q = searchParams.q?.trim() ?? "";
   const status = searchParams.status ?? "ACTIVE";

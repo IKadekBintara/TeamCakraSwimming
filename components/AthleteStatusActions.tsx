@@ -2,9 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import type { AthleteStatus } from "@/types";
 
+/**
+ * Tandai Keluar / Reaktivasi atlet.
+ * Sejak 0024: aksi ini juga mencabut/memulihkan akses akun via
+ * PATCH /api/admin/athlete-accounts (account disable/enable + signOut global),
+ * dengan audit log ATHLETE_MARKED_INACTIVE / ATHLETE_REACTIVATED di server.
+ */
 export default function AthleteStatusActions({
   athleteId,
   status,
@@ -13,76 +18,25 @@ export default function AthleteStatusActions({
   status: AthleteStatus;
 }) {
   const router = useRouter();
-  const supabase = createClient();
   const [mode, setMode] = useState<null | "left" | "reactivate">(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [leftAt, setLeftAt] = useState(new Date().toISOString().slice(0, 10));
   const [reason, setReason] = useState("");
-  const [notes, setNotes] = useState("");
 
-  async function markLeft(e: React.FormEvent) {
-    e.preventDefault();
+  async function submit(action: "mark_left" | "reactivate") {
     setSaving(true);
     setError(null);
     try {
-      const today = new Date().toISOString().slice(0, 10);
-      const { error } = await supabase
-        .from("athletes")
-        .update({
-          status: "LEFT_CLUB",
-          left_at: leftAt,
-          left_reason: reason || null,
-          notes: notes ? notes : undefined,
-        })
-        .eq("id", athleteId);
-      if (error) throw error;
-
-      // Tutup keanggotaan aktif
-      await supabase
-        .from("training_group_members")
-        .update({ left_at: today })
-        .eq("athlete_id", athleteId)
-        .is("left_at", null);
-
-      await supabase.from("audit_logs").insert({
-        action: "mark_left_club",
-        entity: "athletes",
-        entity_id: athleteId,
-        new_value: { left_at: leftAt, left_reason: reason },
+      const res = await fetch("/api/admin/athlete-accounts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ athlete_id: athleteId, action, left_at: leftAt, left_reason: reason }),
       });
-
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Operasi gagal");
       setMode(null);
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function reactivate() {
-    setSaving(true);
-    setError(null);
-    try {
-      const { error } = await supabase
-        .from("athletes")
-        .update({
-          status: "ACTIVE",
-          reactivated_at: new Date().toISOString().slice(0, 10),
-        })
-        .eq("id", athleteId);
-      if (error) throw error;
-
-      await supabase.from("audit_logs").insert({
-        action: "reactivate_athlete",
-        entity: "athletes",
-        entity_id: athleteId,
-        old_value: { status: "LEFT_CLUB" },
-        new_value: { status: "ACTIVE" },
-      });
-
-      setMode(null);
+      setReason("");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal");
@@ -93,9 +47,9 @@ export default function AthleteStatusActions({
 
   if (mode === "left") {
     return (
-      <form onSubmit={markLeft} className="card space-y-3 border-amber-200 bg-amber-50/50">
-        <h3 className="font-semibold text-amber-900">Tandai Keluar dari Klub</h3>
-        <div className="grid gap-3 sm:grid-cols-2">
+      <form onSubmit={(e) => { e.preventDefault(); submit("mark_left"); }} className="card w-full space-y-3 border-amber-200 bg-amber-50/50 sm:max-w-md">
+        <h3 className="font-semibold text-amber-900">Tandai Atlet Ini Sebagai Keluar?</h3>
+        <div className="grid gap-3">
           <div>
             <label className="label">Tanggal Keluar *</label>
             <input type="date" required className="input" value={leftAt} onChange={(e) => setLeftAt(e.target.value)} />
@@ -104,18 +58,18 @@ export default function AthleteStatusActions({
             <label className="label">Alasan</label>
             <input className="input" placeholder="mis. Pindah klub" value={reason} onChange={(e) => setReason(e.target.value)} />
           </div>
-          <div className="sm:col-span-2">
-            <label className="label">Catatan (opsional)</label>
-            <textarea className="input" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </div>
         </div>
-        <p className="text-xs text-amber-700">
-          Riwayat absensi & profil tetap tersimpan. Atlet akan hilang dari daftar absensi aktif.
-        </p>
+        <ul className="list-disc space-y-0.5 pl-5 text-xs text-amber-700">
+          <li>Akun login atlet akan dinonaktifkan dan sesi aktif dicabut.</li>
+          <li>Atlet tidak dapat mengakses sistem selama berstatus keluar.</li>
+          <li>Seluruh data historis tetap disimpan dan dapat dibuka admin.</li>
+          <li>Atlet tidak akan muncul lagi sebagai atlet aktif.</li>
+          <li>Registrasi event &amp; absensi baru tidak dapat dibuat.</li>
+        </ul>
         {error && <p className="text-sm text-red-700">{error}</p>}
         <div className="flex gap-2">
           <button type="submit" disabled={saving} className="btn-danger">
-            {saving ? "Memproses..." : "Konfirmasi Keluar"}
+            {saving ? "Memproses..." : "Tandai Keluar"}
           </button>
           <button type="button" onClick={() => setMode(null)} className="btn-secondary">Batal</button>
         </div>
@@ -125,15 +79,16 @@ export default function AthleteStatusActions({
 
   if (mode === "reactivate") {
     return (
-      <div className="card space-y-3 border-emerald-200 bg-emerald-50/50">
-        <h3 className="font-semibold text-emerald-900">Reaktivasi Atlet</h3>
+      <div className="card w-full space-y-3 border-emerald-200 bg-emerald-50/50 sm:max-w-md">
+        <h3 className="font-semibold text-emerald-900">Aktifkan Kembali Atlet</h3>
         <p className="text-sm text-slate-600">
-          Atlet akan kembali berstatus Aktif. Seluruh riwayat lama dipertahankan.
+          Atlet kembali berstatus Aktif dan akunnya diaktifkan ulang (bisa login lagi).
+          Data historis tidak dibuat ulang — athlete record yang sama yang dipakai.
           Tetapkan kembali kelompoknya lewat tombol Edit setelah reaktivasi.
         </p>
         {error && <p className="text-sm text-red-700">{error}</p>}
         <div className="flex gap-2">
-          <button onClick={reactivate} disabled={saving} className="btn-primary">
+          <button onClick={() => submit("reactivate")} disabled={saving} className="btn-primary">
             {saving ? "Memproses..." : "Konfirmasi Reaktivasi"}
           </button>
           <button onClick={() => setMode(null)} className="btn-secondary">Batal</button>
@@ -144,13 +99,13 @@ export default function AthleteStatusActions({
 
   return (
     <div className="flex gap-2">
-      {status !== "LEFT_CLUB" ? (
+      {status !== "LEFT_CLUB" && status !== "INACTIVE" ? (
         <button onClick={() => setMode("left")} className="btn-secondary text-sm text-amber-700">
           Tandai Keluar
         </button>
       ) : (
         <button onClick={() => setMode("reactivate")} className="btn-primary text-sm">
-          Reaktivasi Atlet
+          Aktifkan Kembali
         </button>
       )}
     </div>
