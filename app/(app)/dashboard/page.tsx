@@ -93,6 +93,31 @@ export default async function DashboardPage() {
     supabase.from("athlete_performance_results").select("id, athlete_id, stroke, distance, time_cs, recorded_at, athletes(cakra)"),
   ]);
 
+  // Communication overview (staff only) — dihitung terpisah agar non-staff tak membebani
+  const isStaff = ["admin", "operator"].includes((currentProfile?.role as string) ?? "");
+  let commStats: { unread: number; reminders: number; pendingPay: number; deadlines: number } | null = null;
+  if (isStaff) {
+    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+    const [unreadC, remC] = await Promise.all([
+      supabase.from("notifications").select("id", { count: "exact", head: true }).eq("is_read", false),
+      supabase.from("notification_deliveries").select("id", { count: "exact", head: true }).gte("last_attempt_at", weekAgo).eq("status", "SENT"),
+    ]);
+    const pendingPayNow = (eventPayments ?? []).filter((p) => p.payment_status === "BELUM_BAYAR").length;
+    const dl7 = (allEvents ?? []).filter((e) => {
+      if (e.status !== "OPEN" || !e.registration_deadline) return false;
+      const [y, m, d] = String(e.registration_deadline).split("-").map(Number);
+      const endMs = Date.UTC(y, m - 1, d, 16, 59, 59); // 23:59:59 WIB
+      const days = (endMs - Date.now()) / 86400000;
+      return days > 0 && days <= 7;
+    }).length;
+    commStats = {
+      unread: unreadC.count ?? 0,
+      reminders: remC.count ?? 0,
+      pendingPay: pendingPayNow,
+      deadlines: dl7,
+    };
+  }
+
   const athletes = allAthletes ?? [];
   const payments = eventPayments ?? [];
   const regs = registrations ?? [];
@@ -504,6 +529,22 @@ export default async function DashboardPage() {
           );
         })()}
       </section>
+
+      {/* Communication overview (staff only) */}
+      {isStaff && (
+        <section aria-label="Communication overview" className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="section-title">Communication Overview</h2>
+            <a href="/communication" className="text-sm text-brand-700 hover:underline dark:text-brand-300">Kelola →</a>
+          </div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="stat-card"><p className="stat-label">Notifikasi Belum Dibaca</p><p className="stat-value">{commStats?.unread ?? 0}</p></div>
+            <div className="stat-card"><p className="stat-label">Reminder Terkirim (7h)</p><p className="stat-value">{commStats?.reminders ?? 0}</p></div>
+            <div className="stat-card"><p className="stat-label">Pengingat Bayar Pending</p><p className="stat-value text-amber-600 dark:text-amber-400">{commStats?.pendingPay ?? 0}</p></div>
+            <div className="stat-card"><p className="stat-label">Deadline ≤7 Hari</p><p className="stat-value text-sky-600 dark:text-sky-400">{commStats?.deadlines ?? 0}</p></div>
+          </div>
+        </section>
+      )}
 
       {/* Grafik existing */}
       <div className="grid gap-4 lg:grid-cols-2">
