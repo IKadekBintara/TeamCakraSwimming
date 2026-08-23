@@ -76,6 +76,7 @@ export default async function DashboardPage() {
     { data: registrations },
     { data: auditLogs },
     { data: currentProfile },
+    { data: perfRows },
   ] = await Promise.all([
     supabase.from("athletes").select("id, status, join_date, left_at, cakra"),
     supabase
@@ -89,6 +90,7 @@ export default async function DashboardPage() {
     supabase.from("event_registrations").select("id, event_id"),
     supabase.from("audit_logs").select("id, action, entity, created_at, profiles(full_name)").order("created_at", { ascending: false }).limit(8),
     supabase.from("profiles").select("role, full_name").eq("id", (await supabase.auth.getUser()).data.user?.id ?? "").maybeSingle(),
+    supabase.from("athlete_performance_results").select("id, athlete_id, stroke, distance, time_cs, recorded_at, athletes(cakra)"),
   ]);
 
   const athletes = allAthletes ?? [];
@@ -422,6 +424,85 @@ export default async function DashboardPage() {
           </table>
         )}
         <p className="mt-2 text-xs text-slate-400">*Persentase hadir dari sesi latihan bulan ini.</p>
+      </section>
+
+      {/* Performance overview */}
+      <section aria-label="Performance overview" className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="card-title !text-base !normal-case !tracking-normal font-semibold text-navy-900">Performance Overview</h2>
+          <Link href="/performance" className="btn-secondary px-3 py-1.5 text-xs">Kelola Performance</Link>
+        </div>
+        {(() => {
+          const perf = (perfRows ?? []) as { id: string; athlete_id: string; stroke: string; distance: number; time_cs: number | null; recorded_at: string; athletes: { cakra?: string | null } | { cakra?: string | null }[] | null }[];
+          const pbKeys = new Set<string>();
+          const bestBy = new Map<string, number>();
+          for (const r of perf) {
+            if (r.time_cs == null) continue;
+            const k = `${r.athlete_id}|${r.stroke}|${r.distance}`;
+            const cur = bestBy.get(k);
+            if (cur == null || r.time_cs < cur) {
+              if (cur != null) pbKeys.add(r.athlete_id);
+              bestBy.set(k, r.time_cs);
+            }
+          }
+          const thisMonth = perf.filter((r) => r.recorded_at >= monthStart).length;
+          const byCakraPerf = new Map<string, { athletes: Set<string>; results: number; improved: number }>();
+          for (const r of perf) {
+            const a = Array.isArray(r.athletes) ? r.athletes[0] : r.athletes;
+            const ck = a?.cakra || "Tanpa Cakra";
+            const cur = byCakraPerf.get(ck) ?? { athletes: new Set<string>(), results: 0, improved: 0 };
+            cur.results += 1;
+            cur.athletes.add(r.athlete_id);
+            byCakraPerf.set(ck, cur);
+          }
+          return (
+            <>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div className="stat-card"><p className="stat-label">Total Hasil Tercatat</p><p className="stat-value">{perf.length}</p></div>
+                <div className="stat-card"><p className="stat-label">Atlet dengan PB Baru</p><p className="stat-value text-brand-600">{pbKeys.size}</p></div>
+                <div className="stat-card"><p className="stat-label">Atlet Berprestasi Aktif</p><p className="stat-value">{byCakraPerf.size > 0 ? Array.from(byCakraPerf.values()).reduce((n, v) => n + v.athletes.size, 0) : 0}</p></div>
+                <div className="stat-card"><p className="stat-label">Hasil Bulan Ini</p><p className="stat-value">{thisMonth}</p></div>
+              </div>
+              {perf.length === 0 ? (
+                <div className="empty-state">
+                  <p className="empty-state-title">Belum ada hasil performance tercatat.</p>
+                  <p className="empty-state-desc">Coach/admin dapat mulai mencatat lewat halaman Performance atau profil atlet.</p>
+                </div>
+              ) : (
+                <div className="table-wrap">
+                  <table className="table !min-w-[560px]">
+                    <thead><tr><th>Cakra</th><th>Atlet dengan Hasil</th><th>Total Hasil</th><th>PB Improvements</th></tr></thead>
+                    <tbody>
+                      {Array.from(byCakraPerf.entries()).map(([name, v]) => {
+                        const perAthleteBest = new Map<string, number>();
+                        let improvements = 0;
+                        const chrono = perf.filter((r) => (Array.isArray(r.athletes) ? r.athletes[0] : r.athletes)?.cakra === name.replace(/^Tanpa Cakra$/, "Tanpa Cakra")).sort((x, y) => x.recorded_at.localeCompare(y.recorded_at));
+                        void chrono;
+                        for (const r of perf) {
+                          const a = Array.isArray(r.athletes) ? r.athletes[0] : r.athletes;
+                          if ((a?.cakra || "Tanpa Cakra") !== name) continue;
+                          if (r.time_cs == null) continue;
+                          const k = `${r.athlete_id}|${r.stroke}|${r.distance}`;
+                          const prev = perAthleteBest.get(k);
+                          if (prev != null && r.time_cs < prev) improvements += 1;
+                          if (prev == null || r.time_cs < prev) perAthleteBest.set(k, r.time_cs);
+                        }
+                        return (
+                          <tr key={name}>
+                            <td className="font-medium">{name}</td>
+                            <td>{v.athletes.size}</td>
+                            <td>{v.results}</td>
+                            <td className="text-brand-700">{improvements}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          );
+        })()}
       </section>
 
       {/* Grafik existing */}
