@@ -5,6 +5,7 @@ import EventRegistrationForm from "@/components/EventRegistrationForm";
 import PaymentProofForm from "@/components/PaymentProofForm";
 import RelayTeamForm from "@/components/RelayTeamForm";
 import EventStatusActions from "@/components/EventStatusActions";
+import EventPaymentsManager, { type PayRow } from "@/components/EventPaymentsManager";
 import { rupiah } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,27 @@ export default async function EventDetailPage({ params }: { params: { id: string
   ]);
   if (!event) notFound();
 
+  const payRows: PayRow[] = (registrations ?? []).map((r) => {
+    const p = Array.isArray(r.event_payments) ? r.event_payments[0] : r.event_payments;
+    const entries = (r.event_registration_entries ?? []).map((e) => (e.event_races as { name?: string } | null)?.name).filter(Boolean).join(", ");
+    return {
+      id: r.id,
+      athlete: (r.athletes as { full_name?: string } | null)?.full_name ?? "—",
+      athleteId: String(r.athlete_id),
+      ku: r.ku_override || r.ku,
+      entries,
+      regStatus: String(r.status),
+      pay: p ? {
+        id: p.id,
+        status: String(p.payment_status),
+        total: Number(p.total_amount || 0),
+        paid: Number(p.amount_paid || 0),
+        method: p.payment_method,
+        proof: p.payment_proof,
+      } : null,
+    };
+  });
+
   const cakraOf = new Map<string, string>();
   for (const m of memberships ?? []) cakraOf.set(m.athlete_id, (m.training_groups as { name?: string } | null)?.name ?? "");
   const formAthletes = (athletes ?? []).map((a) => ({ ...a, cakra: cakraOf.get(a.id) ?? null }));
@@ -40,7 +62,7 @@ export default async function EventDetailPage({ params }: { params: { id: string
       {canRegister && <RelayTeamForm eventId={event.id} races={races ?? []} athletes={formAthletes} />}
       <div className="card overflow-x-auto"><h2 className="mb-3 text-lg font-semibold">Nomor Lomba</h2><table className="w-full min-w-[500px] text-sm"><thead><tr className="border-b text-left text-xs uppercase text-slate-500"><th className="px-2 py-2">Nomor</th><th className="px-2 py-2">KU</th><th className="px-2 py-2">Tipe</th></tr></thead><tbody className="divide-y">{(races ?? []).map((r) => <tr key={r.id}><td className="px-2 py-2 font-medium">{r.name}</td><td className="px-2 py-2 text-slate-600">{r.allowed_kus.join(", ") || "Semua"}</td><td className="px-2 py-2">{r.is_relay ? "Estafet" : "Individu"}</td></tr>)}</tbody></table></div>
     </div>
-    <div className="card overflow-x-auto"><div className="mb-3 flex items-center justify-between"><h2 className="text-lg font-semibold">Pendaftaran Event</h2><Link href="/keuangan" className="text-sm text-brand-700 hover:underline">Lihat Keuangan →</Link></div><table className="w-full min-w-[720px] text-sm"><thead><tr className="border-b text-left text-xs uppercase text-slate-500"><th className="px-2 py-2">Atlet</th><th className="px-2 py-2">KU</th><th className="px-2 py-2">Nomor</th><th className="px-2 py-2">Payment</th><th className="px-2 py-2">Tagihan</th></tr></thead><tbody className="divide-y">{(registrations ?? []).map((r) => { const p = Array.isArray(r.event_payments) ? r.event_payments[0] : r.event_payments; const entries = (r.event_registration_entries ?? []).map((e) => (e.event_races as { name?: string } | null)?.name).filter(Boolean).join(", "); return <tr key={r.id}><td className="px-2 py-2 font-medium">{(r.athletes as { full_name?: string } | null)?.full_name}</td><td className="px-2 py-2">{r.ku_override || r.ku}</td><td className="px-2 py-2">{entries || "—"}</td><td className="px-2 py-2"><span className="badge bg-slate-100 text-slate-700">{p?.payment_status || "—"}</span></td><td className="px-2 py-2">{rupiah(p?.total_amount)}</td></tr>; })}</tbody></table>{(registrations ?? []).length === 0 && <p className="text-sm text-slate-500">Belum ada pendaftaran.</p>}</div>
+    <EventPaymentsManager rows={payRows} eventName={event.name} eventId={event.id} canManage={canManage} />
     {canRegister && <div className="space-y-3">{(registrations ?? []).map((r) => { const p = Array.isArray(r.event_payments) ? r.event_payments[0] : r.event_payments; return p ? <PaymentProofForm key={r.id} paymentId={p.id} currentAmount={Number(p.amount_paid || 0)} totalAmount={Number(p.total_amount || 0)} status={String(p.payment_status)} /> : null; })}</div>}
   </div>;
 }

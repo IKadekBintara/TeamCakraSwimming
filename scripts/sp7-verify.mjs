@@ -97,11 +97,14 @@ const log=(m)=>{out.push(m);console.log(m);};
       // fallback: atlet mana pun milik admin (staff scope)
       const {data:anyAthlete}=await svc.from('athletes').select('id').neq('id',kidId).eq('status','ACTIVE').limit(1);
       if(anyAthlete?.[0]){
-        const al=await createClient(url,anon,{auth:{persistSession:false}}).auth.signInWithPassword({email:'admin@cakra.local',password:'Admin123!'});
-        const adminC=createClient(url,anon,{auth:{persistSession:false}});
-        await adminC.auth.setSession(al.session);
-        const {data:r2b,error:e2b}=await adminC.rpc('create_event_registration',{p_event_id:event.id,p_athlete_id:anyAthlete[0].id,p_ku:'10',p_race_ids:[race.id]});
-        if(!e2b) reg2=r2b; else log(`REG2 err: ${e2b.message}`);
+        const {data:aL,error:aE}=await createClient(url,anon,{auth:{persistSession:false}}).auth.signInWithPassword({email:'admin@cakra.local',password:'Admin123!'});
+        if(!aL?.session||aE){log(`REG2 note: login admin gagal ${aE?.message??''}`);}
+        else{
+          const adminC=createClient(url,anon,{auth:{persistSession:false}});
+          await adminC.auth.setSession(aL.session);
+          const {data:r2b,error:e2b}=await adminC.rpc('create_event_registration',{p_event_id:event.id,p_athlete_id:anyAthlete[0].id,p_ku:'10',p_race_ids:[race.id]});
+          if(!e2b) reg2=r2b; else log(`REG2 err: ${e2b.message}`);
+        }
       }
     }
     let t2ok=null, oldTotal=null;
