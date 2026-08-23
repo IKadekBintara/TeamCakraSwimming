@@ -20,7 +20,7 @@ export default function AthletePerformance({ results }: { results: PerfResult[] 
       cur.count += 1;
       if (!cur.last || r.recorded_at > cur.last.recorded_at) cur.last = r;
       if (r.time_cs != null && (cur.pb == null || r.time_cs < cur.pb)) cur.pb = r.time_cs;
-      if (r.time_cs != null && (cur.best == null || r.time_cs < cur.best.time_cs)) cur.best = r;
+      if (r.time_cs != null && (cur.best == null || (cur.best.time_cs ?? Infinity) > r.time_cs)) cur.best = r;
       map.set(r.stroke, cur);
     }
     return map;
