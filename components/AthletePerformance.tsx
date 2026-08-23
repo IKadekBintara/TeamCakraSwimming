@@ -7,7 +7,7 @@ import { formatTime, computePbs, comboKey, type PerfResult } from "@/lib/perform
  * Performance section pada profil atlet.
  * Semua angka dihitung dari data nyata; tanpa data -> empty state informatif.
  */
-export default function AthletePerformance({ results }: { results: PerfResult[] }) {
+export default function AthletePerformance({ results, attendanceRate }: { results: PerfResult[]; attendanceRate?: number }) {
   const [combo, setCombo] = useState<string | null>(null);
 
   const pbs = useMemo(() => computePbs(results), [results]);
@@ -74,6 +74,16 @@ export default function AthletePerformance({ results }: { results: PerfResult[] 
         <div className="stat-card"><p className="stat-label">Personal Best</p><p className="stat-value">{pbs.size}</p></div>
         <div className="stat-card"><p className="stat-label">Kompetisi</p><p className="stat-value">{new Set(results.map((r) => r.event_id ?? r.meet_name).filter(Boolean)).size}</p></div>
       </div>
+
+      {/* Kehadiran × performance (read-only, objektif, tanpa kesimpulan medis) */}
+      {typeof attendanceRate === "number" && (
+        <p className="text-xs text-slate-500">
+          Attendance rate: <strong>{attendanceRate}%</strong>
+          {comparison && comparison.delta !== 0 && (
+            <> · Performance trend: <strong>{comparison.delta > 0 ? "improving" : "decreased compared with previous recorded result"}</strong></>
+          )}
+        </p>
+      )}
 
       {/* Stroke overview */}
       <div className="card overflow-x-auto">

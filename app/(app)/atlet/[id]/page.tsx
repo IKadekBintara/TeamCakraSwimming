@@ -196,7 +196,7 @@ export default async function AtletDetailPage({
         />
       )}
 
-      <AthletePerformance results={(perfRows ?? []) as unknown as PerfResult[]} />
+      <AthletePerformance results={(perfRows ?? []) as unknown as PerfResult[]} attendanceRate={pct} />
 
       <div className="card">
         <h2 className="mb-3 font-semibold">Riwayat Kelompok</h2>
