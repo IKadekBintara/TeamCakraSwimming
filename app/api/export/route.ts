@@ -6,6 +6,14 @@ import { ATTENDANCE_LABELS, DAY_NAMES, STATUS_LABELS } from "@/types";
 import { calculateDolphinKu } from "@/lib/events";
 import { rateLimit } from "@/lib/rate-limit";
 
+/** Filename ASCII-safe untuk HTTP header (ByteString) — Unicode tetap aman. */
+function asciiFilename(base: string): string {
+  const cleaned = base.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9 .\-_()]+/g, " ").replace(/\s+/g, " ").trim();
+  return cleaned.length ? cleaned.slice(0, 120) : "export.xlsx";
+}
+
+const STAFF_ROLES = new Set(["admin", "operator", "coach", "group_leader", "ketua_kelompok"]);
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -39,7 +47,32 @@ export async function GET(req: NextRequest) {
   const kind = req.nextUrl.searchParams.get("kind") ?? "athletes";
   const from = req.nextUrl.searchParams.get("from") ?? "2000-01-01";
   const to = req.nextUrl.searchParams.get("to") ?? "2100-01-01";
-  log("stage=request.parsed", { kind, from, to });
+  const eventId = req.nextUrl.searchParams.get("event_id");
+  log("stage=request.parsed", { kind, from, to, event_id: eventId });
+
+  // Export berisi data organisasi — hanya staff yang boleh mengunduh.
+  if (!STAFF_ROLES.has(profile?.role ?? "")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403, headers: { "x-request-id": requestId } });
+  }
+
+  // Validasi event_id untuk export berbasis event (400 invalid, 404 tidak ditemukan).
+  let pickedEvent: { id: string; name: string } | null = null;
+  if (kind === "event_registrations" || kind === "event_finance") {
+    if (!eventId) {
+      return NextResponse.json({ error: "event_id wajib diisi" }, { status: 400, headers: { "x-request-id": requestId } });
+    }
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidPattern.test(eventId)) {
+      return NextResponse.json({ error: "event_id tidak valid" }, { status: 400, headers: { "x-request-id": requestId } });
+    }
+    stage = "query.event";
+    const { data: evRow } = await supabase.from("events").select("id, name").eq("id", eventId).maybeSingle();
+    if (!evRow) {
+      return NextResponse.json({ error: "Event tidak ditemukan" }, { status: 404, headers: { "x-request-id": requestId } });
+    }
+    pickedEvent = evRow;
+  }
+  const eventName = pickedEvent?.name ?? "";
 
   const datePattern = /^\d{4}-\d{2}-\d{2}$/;
   if (!datePattern.test(from) || !datePattern.test(to) || from > to) {
@@ -160,6 +193,7 @@ export async function GET(req: NextRequest) {
     const { data: registrations, error: registrationsError } = await supabase
       .from("event_registrations")
       .select("id, event_id, athlete_id, ku, ku_override, status, created_at, athletes(full_name, gender, birth_date, cakra), events(name, event_date), event_registration_entries(race_id, price_snapshot)")
+      .eq("event_id", eventId!)
       .gte("created_at", `${from}T00:00:00Z`)
       .lt("created_at", toExclusive.toISOString())
       .order("created_at");
@@ -225,13 +259,20 @@ export async function GET(req: NextRequest) {
       };
     });
     log("stage=mapping.complete", { row_count: rows.length });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Pendaftaran");
-    filename = "TEAM CAKRA - DATA PENDAFTARAN EVENT.xlsx";
+    if (rows.length === 0) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+        ["ID Pendaftaran", "ID Atlet", "Nama", "PA/PI", "Tanggal Lahir", "Tahun Lahir", "KU", "Cakra", "Event", "Tanggal Event", "Nomor Lomba", "Harga Nomor", "Admin", "Total", "Status Pendaftaran", "Status Pembayaran", "Tanggal Pendaftaran"],
+      ]), "Pendaftaran");
+    } else {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Pendaftaran");
+    }
+    filename = asciiFilename(`TEAM CAKRA - DATA PENDAFTARAN - ${eventName || "SEMUA EVENT"}`);
   } else if (kind === "event_finance") {
     stage = "query.finance";
     const { data: payments, error } = await supabase
       .from("event_payments")
       .select("id, transaction_id, athlete_id, athlete_name, cakra, jumlah_nomor, registration_fee, admin_fee, total_amount, amount_paid, remaining_amount, payment_status, payment_method, payment_destination, submitted_at, verified_at, notes, events(name, event_date), event_registrations(ku, ku_override, event_registration_entries(event_races(name)), athletes(full_name, gender, birth_date))")
+      .eq("event_id", eventId!)
       .order("created_at");
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     const rows = (payments ?? []).map((p) => ({
@@ -253,8 +294,14 @@ export async function GET(req: NextRequest) {
       "Verified At": p.verified_at ?? "",
       "Catatan": p.notes ?? "",
     }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Keuangan");
-    filename = "TEAM CAKRA - KEUANGAN DOLPHIN.xlsx";
+    if (rows.length === 0) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+        ["ID Transaksi", "ID Atlet", "Nama", "Cakra", "Event", "Jumlah Nomor", "Uang Pendaftaran", "Admin", "Total Tagihan", "Sudah Dibayar", "Sisa", "Status Pembayaran", "Metode Pembayaran", "Tujuan Pembayaran", "Tanggal Bayar", "Verified At", "Catatan"],
+      ]), "Keuangan");
+    } else {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Keuangan");
+    }
+    filename = asciiFilename(`TEAM CAKRA - KEUANGAN - ${eventName || "SEMUA EVENT"}`);
   } else if (kind === "performance") {
     stage = "query.performance";
     const { data: perf, error: perfError } = await supabase
