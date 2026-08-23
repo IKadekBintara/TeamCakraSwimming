@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import PerformanceResultForm from "@/components/PerformanceResultForm";
 import { formatTime, STROKES } from "@/lib/performance";
-import { CAKRA_GROUPS } from "@/lib/events";
+import { CAKRA_GROUPS, calculateDolphinKu } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +27,7 @@ type Row = {
 export default async function PerformancePage({
   searchParams,
 }: {
-  searchParams: { q?: string; cakra?: string; stroke?: string; from?: string; to?: string; event?: string; page?: string; edit?: string };
+  searchParams: { q?: string; cakra?: string; ku?: string; stroke?: string; from?: string; to?: string; event?: string; page?: string; edit?: string };
 }) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -38,6 +38,7 @@ export default async function PerformancePage({
 
   const q = searchParams.q?.trim() ?? "";
   const fCakra = searchParams.cakra ?? "ALL";
+  const fKu = searchParams.ku ?? "ALL";
   const fStroke = searchParams.stroke ?? "ALL";
   const fFrom = searchParams.from ?? "";
   const fTo = searchParams.to ?? "";
@@ -61,8 +62,19 @@ export default async function PerformancePage({
     const a = Array.isArray(r.athletes) ? r.athletes[0] : r.athletes;
     if (fCakra !== "ALL" && (a?.cakra ?? "") !== fCakra) return false;
     if (q && !(a?.full_name ?? "").toLowerCase().includes(q.toLowerCase())) return false;
+    if (fKu !== "ALL" && calculateDolphinKu(a?.birth_date) !== fKu) return false;
     return true;
   });
+
+  // Opsi KU unik dari data (configurable, tidak hard-code)
+  const kuOptions = Array.from(
+    new Set(((rawRows ?? []) as unknown as Row[])
+      .map((r) => {
+        const a = Array.isArray(r.athletes) ? r.athletes[0] : r.athletes;
+        return calculateDolphinKu(a?.birth_date);
+      })
+      .filter(Boolean))
+  ).sort();
 
   const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
 
@@ -110,7 +122,7 @@ export default async function PerformancePage({
   ]);
 
   const qs = (over: Record<string, string>) => {
-    const sp = new URLSearchParams({ q, cakra: fCakra, stroke: fStroke, from: fFrom, to: fTo, event: fEvent, page: String(page), ...over });
+    const sp = new URLSearchParams({ q, cakra: fCakra, ku: fKu, stroke: fStroke, from: fFrom, to: fTo, event: fEvent, page: String(page), ...over });
     return `/performance?${sp.toString()}`;
   };
 
@@ -155,7 +167,10 @@ export default async function PerformancePage({
           </select>
         </label>
         <label className="label">KU
-          <input className="input" name="ku" placeholder="(via profil atlet)" disabled />
+          <select className="input" name="ku" defaultValue={fKu}>
+            <option value="ALL">Semua</option>
+            {kuOptions.map((k) => <option key={k}>{k}</option>)}
+          </select>
         </label>
         <label className="label">Stroke
           <select className="input" name="stroke" defaultValue={fStroke}>
