@@ -27,7 +27,7 @@ type Row = {
 export default async function PerformancePage({
   searchParams,
 }: {
-  searchParams: { q?: string; cakra?: string; stroke?: string; from?: string; to?: string; event?: string; page?: string };
+  searchParams: { q?: string; cakra?: string; stroke?: string; from?: string; to?: string; event?: string; page?: string; edit?: string };
 }) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -66,6 +66,44 @@ export default async function PerformancePage({
 
   const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
 
+  // Hasil yang sedang diedit (via ?edit=<id>) — hanya jika role berwenang
+  let editRow: {
+    id: string;
+    athlete_id: string;
+    athlete_name?: string;
+    recorded_at: string;
+    stroke: string;
+    distance: number;
+    time_cs: number | null;
+    pool_length: number | null;
+    meet_name: string | null;
+    notes: string | null;
+    rank: number | null;
+  } | null = null;
+  if (searchParams.edit) {
+    const { data: er } = await supabase
+      .from("athlete_performance_results")
+      .select("id, athlete_id, recorded_at, stroke, distance, time_cs, pool_length, meet_name, notes, rank, athletes(full_name)")
+      .eq("id", searchParams.edit)
+      .maybeSingle();
+    if (er) {
+      const ea = Array.isArray(er.athletes) ? er.athletes[0] : er.athletes;
+      editRow = {
+        id: er.id,
+        athlete_id: er.athlete_id,
+        athlete_name: (ea as { full_name?: string } | null)?.full_name,
+        recorded_at: er.recorded_at,
+        stroke: er.stroke,
+        distance: er.distance,
+        time_cs: er.time_cs,
+        pool_length: er.pool_length,
+        meet_name: er.meet_name,
+        notes: er.notes,
+        rank: er.rank,
+      };
+    }
+  }
+
   const [{ data: athleteOpts }, { data: eventOpts }] = await Promise.all([
     supabase.from("athletes").select("id, full_name").order("full_name"),
     supabase.from("events").select("id, name").order("event_date", { ascending: false }).limit(50),
@@ -86,10 +124,23 @@ export default async function PerformancePage({
         <a href="/api/export?kind=performance" className="btn-secondary shrink-0">Export Excel</a>
       </header>
 
-      <details className="group">
-        <summary className="btn-primary inline-block cursor-pointer select-none">+ Catat Hasil Baru</summary>
+      <details className="group" open={!!editRow}>
+        <summary className="btn-primary inline-block cursor-pointer select-none">{editRow ? "✎ Edit Hasil" : "+ Catat Hasil Baru"}</summary>
         <div className="mt-3">
-          <PerformanceResultForm athletes={(athleteOpts ?? []) as { id: string; full_name: string }[]} events={(eventOpts ?? []) as { id: string; name: string }[]} />
+          {editRow ? (
+            <>
+              <p className="mb-2 text-sm text-slate-500">Mengedit hasil {editRow.athlete_name ? `milik ${editRow.athlete_name}` : ""} — atlet tidak dapat diubah pada mode edit.</p>
+              <PerformanceResultForm
+                athletes={((athleteOpts ?? []) as { id: string; full_name: string }[])}
+                events={(eventOpts ?? []) as { id: string; name: string }[]}
+                canDelete={role === "admin"}
+                editResult={editRow}
+              />
+              <Link href="/performance" className="mt-2 inline-block text-sm text-brand-700 hover:underline">← Batal edit, kembali ke daftar</Link>
+            </>
+          ) : (
+            <PerformanceResultForm athletes={(athleteOpts ?? []) as { id: string; full_name: string }[]} events={(eventOpts ?? []) as { id: string; name: string }[]} />
+          )}
         </div>
       </details>
 
@@ -138,7 +189,7 @@ export default async function PerformancePage({
       ) : (
         <div className="table-wrap">
           <table className="table !min-w-[900px]">
-            <thead><tr><th>Tanggal</th><th>Atlet</th><th>Cakra</th><th>Nomor</th><th>Waktu</th><th>Kolam</th><th>Meet / Event</th><th>Rank</th></tr></thead>
+            <thead><tr><th>Tanggal</th><th>Atlet</th><th>Cakra</th><th>Nomor</th><th>Waktu</th><th>Kolam</th><th>Meet / Event</th><th>Rank</th><th>Aksi</th></tr></thead>
             <tbody>
               {rowsAll.map((r) => {
                 const a = Array.isArray(r.athletes) ? r.athletes[0] : r.athletes;
@@ -153,6 +204,9 @@ export default async function PerformancePage({
                     <td>{r.pool_length ? `${r.pool_length} m` : "—"}</td>
                     <td className="max-w-[180px] truncate">{evOpt?.name ?? r.meet_name ?? "—"}</td>
                     <td>{r.rank ?? "—"}</td>
+                    <td>
+                      <Link href={`/performance?edit=${r.id}`} className="text-brand-700 hover:underline" aria-label={`Edit hasil ${a?.full_name ?? ""} ${r.stroke} ${r.distance}m`}>Edit</Link>
+                    </td>
                   </tr>
                 );
               })}

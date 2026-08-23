@@ -94,6 +94,26 @@ export default function AthletePerformance({ results }: { results: PerfResult[] 
         </table>
       </div>
 
+      {/* Riwayat lengkap — terbaru dulu */}
+      <div className="card overflow-x-auto">
+        <h2 className="card-title mb-3">Riwayat Hasil</h2>
+        <table className="table !min-w-[680px]">
+          <thead><tr><th>Tanggal</th><th>Nomor</th><th>Waktu</th><th>Kolam</th><th>Meet / Event</th><th>Catatan</th></tr></thead>
+          <tbody>
+            {results.map((r) => (
+              <tr key={r.id}>
+                <td className="whitespace-nowrap text-slate-500">{r.recorded_at}</td>
+                <td>{r.stroke} {r.distance}m</td>
+                <td className="font-semibold">{formatTime(r.time_cs)}</td>
+                <td>{r.pool_length ? `${r.pool_length} m` : "—"}</td>
+                <td className="max-w-[160px] truncate">{r.meet_name ?? (r.event_id ? `Event ${r.event_id.slice(0, 8)}…` : "—")}</td>
+                <td className="max-w-[200px] truncate">{r.notes || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       {/* Chart perkembangan */}
       <div className="card">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
