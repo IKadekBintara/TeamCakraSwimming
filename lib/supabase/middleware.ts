@@ -13,6 +13,11 @@ export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(url, key, {
+      global: {
+        // Hindari cache fetch bawaan Next.js App Router agar status sesi selalu segar.
+        fetch: (u: Parameters<typeof fetch>[0], i?: Parameters<typeof fetch>[1]) =>
+          fetch(u, { ...i, cache: "no-store" }),
+      },
       cookies: {
         getAll() {
           return request.cookies.getAll();

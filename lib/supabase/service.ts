@@ -9,5 +9,10 @@ export function createServiceClient() {
   }
   return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
+    // Next.js App Router meng-cache fetch GET secara default -> data basi.
+    // Semua query service harus selalu fresh (pembayaran/event/status).
+    global: {
+      fetch: (u, i) => fetch(u, { ...i, cache: "no-store" }),
+    },
   });
 }
