@@ -25,20 +25,33 @@ const log=(m)=>{out.push(m);console.log(m);};
   const kidId=kid?.[0]?.id;
   if(!kidId) throw new Error('parent uji tidak punya atlet');
 
-  // ==== Fixture event ====
-  const {data:event}=await svc.from('events').insert({
+  // ==== Fixture event (idempoten: buang sisa run sebelumnya BESERTA child rows-nya) ====
+  const {data:oldEvents}=await svc.from('events').select('id').like('name','[SP7-VERIFY]%');
+  for(const ev of (oldEvents ?? [])){
+    const {data:oldRegs}=await svc.from('event_registrations').select('id').eq('event_id',ev.id);
+    for(const r of (oldRegs ?? [])){
+      await svc.from('event_payments').delete().eq('registration_id',r.id);
+      await svc.from('event_registration_entries').delete().eq('registration_id',r.id);
+      await svc.from('audit_logs').delete().eq('entity','event_registrations').in('entity_id',[String(r.id)]);
+    }
+    await svc.from('event_registrations').delete().eq('event_id',ev.id);
+    await svc.from('event_races').delete().eq('event_id',ev.id);
+  }
+  await svc.from('events').delete().like('name','[SP7-VERIFY]%');
+  const {data:event,error:eventErr}=await svc.from('events').insert({
     name:'[SP7-VERIFY] Event Regresi Harga', event_date:'2026-12-31', location:'Kolam Uji',
     status:'OPEN', registration_deadline:'2026-12-30',
     fee_per_entry:55000, admin_fee:10000,
   }).select('id').single();
+  if(eventErr||!event){log(`FATAL insert event: ${eventErr?.message}`);process.exit(1);}
   log(`fixture event: ${event.id}`);
 
-  const {data:race}=await svc.from('event_races').insert({
+  const {data:race,error:raceErr}=await svc.from('event_races').insert({
     event_id:event.id, name:'[SP7] Freestyle 50m', distance_m:50, stroke:'Freestyle',
     allowed_kus:[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15], is_relay:false, is_active:true,
     sort_order:99, price:55000, is_free:false,
   }).select('id').single();
-  log(`fixture race @55rb: ${race.id}`);
+  if(raceErr||!race){log(`FATAL insert race: ${raceErr?.message}`);process.exit(1);}
 
   // ==== Login parent ====
   const p=svc; // service untuk cek; parent login:
