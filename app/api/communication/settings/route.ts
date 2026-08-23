@@ -62,9 +62,9 @@ export async function POST(req: NextRequest) {
     actor_id: user.id,
     action: "UPDATE_AUTOMATION_SETTING",
     entity: "automation_settings",
-    entity_id: body.id,
+    entity_id: null,
     old_value: before ?? null,
-    new_value: patch,
+    new_value: { id: body.id, ...patch },
   });
 
   return NextResponse.json({ ok: true });

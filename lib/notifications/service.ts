@@ -1,9 +1,10 @@
 /**
  * TEAM CAKRA SWIMMING — Notification service (server-side).
- * Dispatch in-app via DB RPC `notify` (idempoten), email/WA via provider abstraction
- * dengan delivery log + retry max 3 attempt.
+ * Dispatch in-app via tulisan tabel langsung + dedupe dispatch_key (idempoten),
+ * email/WA via provider abstraction dengan delivery log + retry max 3 attempt.
  */
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
+import { sendInApp } from "./dispatch";
 import { renderTemplate, type Vars } from "./render";
 import { emailProvider, whatsappProvider } from "./providers";
 import type { SendResult } from "./providers";
@@ -21,23 +22,18 @@ export type DispatchInput = {
   vars?: Vars;
 };
 
-/** Kirim in-app notification idempoten via DB. Returns notification id atau null duplikat. */
+/** Kirim in-app notification idempoten. Returns notification id atau null duplikat. */
 export async function notifyInApp(input: DispatchInput): Promise<string | null> {
-  const supabase = createClient();
-  // service context: gunakan client server biasa; trigger DB tidak dipakai di jalur ini
-  const { data, error } = await supabase.rpc("notify", {
-    p_recipient: input.recipientId,
-    p_ntype: input.ntype,
-    p_title: input.title,
-    p_message: input.message ?? "",
-    p_link: input.linkPath ?? null,
-    p_key: input.dispatchKey ?? null,
+  const svc = createServiceClient();
+  const { id } = await sendInApp(svc, {
+    recipientId: input.recipientId,
+    ntype: input.ntype,
+    title: input.title,
+    message: input.message ?? "",
+    link: input.linkPath ?? null,
+    key: input.dispatchKey ?? null,
   });
-  if (error) {
-    console.error("notify_in_app_failed", error.message);
-    return null;
-  }
-  return (data as string) ?? null;
+  return id;
 }
 
 /** Log delivery attempt ke notification_deliveries (service role dibutuhkan untuk write). */
@@ -91,8 +87,8 @@ export async function dispatchTemplated(opts: {
   relatedType?: string;
   relatedId?: string;
 }): Promise<void> {
-  const supabase = createClient();
-  const { data: tpl } = await supabase
+  const svc = createServiceClient();
+  const { data: tpl } = await svc
     .from("notification_templates")
     .select("subject, body")
     .eq("key", opts.templateKey)

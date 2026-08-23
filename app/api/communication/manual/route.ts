@@ -63,8 +63,8 @@ export async function POST(req: NextRequest) {
     actor_id: user.id,
     action: "MANUAL_NOTIFICATION",
     entity: "notifications",
-    entity_id: body.target_role,
-    new_value: { title, message, recipients: count },
+    entity_id: null,
+    new_value: { target_role: body.target_role, title, message, recipients: count },
   });
 
   return NextResponse.json({ ok: true, sent: count });

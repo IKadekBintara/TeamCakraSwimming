@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     actor_id: user.id,
     action: "UPDATE_NOTIFICATION_TEMPLATE",
     entity: "notification_templates",
-    entity_id: body.key,
+    entity_id: null,
     old_value: before ?? null,
     new_value: { subject: patch.subject ?? before?.subject, body: patch.body, is_active: patch.is_active ?? before?.is_active },
   });
