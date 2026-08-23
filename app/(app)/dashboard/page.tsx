@@ -3,8 +3,10 @@ import StatCard from "@/components/StatCard";
 import GrowthChart, { type GrowthPoint } from "@/components/GrowthChart";
 import GroupDistribution from "@/components/GroupDistribution";
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { DAY_NAMES } from "@/types";
-import { rupiah } from "@/lib/events";
+import { rupiah, CAKRA_GROUPS } from "@/lib/events";
+import { normalizeCakra } from "@/lib/cakra";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +60,13 @@ function greeting(h: number) {
   return "Selamat malam";
 }
 
+/** Kartu antrean memerah saat ada verifikasi tertunda — sinyal visual prioritas. */
+function queueTone(failed: number, pending: number) {
+  if (failed > 0) return "border-red-300 bg-red-50/60";
+  if (pending > 0) return "border-amber-300 bg-amber-50/40";
+  return "";
+}
+
 export default async function DashboardPage() {
   const supabase = createClient();
   const today = new Date().toISOString().slice(0, 10);
@@ -95,12 +104,13 @@ export default async function DashboardPage() {
 
   // Communication overview (staff only) — dihitung terpisah agar non-staff tak membebani
   const isStaff = ["admin", "operator"].includes((currentProfile?.role as string) ?? "");
-  let commStats: { unread: number; reminders: number; pendingPay: number; deadlines: number } | null = null;
+  let commStats: { unread: number; reminders: number; pendingPay: number; deadlines: number; failed: number } | null = null;
   if (isStaff) {
     const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
-    const [unreadC, remC] = await Promise.all([
+    const [unreadC, remC, failC] = await Promise.all([
       supabase.from("notifications").select("id", { count: "exact", head: true }).eq("is_read", false),
       supabase.from("notification_deliveries").select("id", { count: "exact", head: true }).gte("last_attempt_at", weekAgo).eq("status", "SENT"),
+      supabase.from("notification_deliveries").select("id", { count: "exact", head: true }).eq("status", "FAILED"),
     ]);
     const pendingPayNow = (eventPayments ?? []).filter((p) => p.payment_status === "BELUM_BAYAR").length;
     const dl7 = (allEvents ?? []).filter((e) => {
@@ -115,6 +125,7 @@ export default async function DashboardPage() {
       reminders: remC.count ?? 0,
       pendingPay: pendingPayNow,
       deadlines: dl7,
+      failed: failC.count ?? 0,
     };
   }
 
@@ -178,9 +189,9 @@ export default async function DashboardPage() {
       .from("attendance")
       .select("athlete_id, status")
       .in("session_id", monthSessionIds);
-    const cakraOf = new Map(athletes.map((a) => [a.id, a.cakra || "Tanpa Cakra"]));
+    const cakraOf = new Map(athletes.map((a) => [a.id, normalizeCakra(a.cakra)]));
     for (const a of att ?? []) {
-      const key = cakraOf.get(a.athlete_id) ?? "Tanpa Cakra";
+      const key = cakraOf.get(a.athlete_id) ?? "Tidak tersedia";
       const cur = attByCakra.get(key) ?? { present: 0, total: 0 };
       cur.total += 1;
       if (a.status === "present") cur.present += 1;
@@ -191,7 +202,7 @@ export default async function DashboardPage() {
   // ===== Rekap per Cakra =====
   const cakraSummary = new Map<string, { athletes: number; active: number; registrations: number; bills: number; paid: number; remaining: number; attPresent: number; attTotal: number }>();
   for (const athlete of athletes) {
-    const key = athlete.cakra || "Tidak tersedia";
+    const key = normalizeCakra(athlete.cakra);
     const current = cakraSummary.get(key) ?? { athletes: 0, active: 0, registrations: 0, bills: 0, paid: 0, remaining: 0, attPresent: 0, attTotal: 0 };
     current.athletes += 1;
     if (athlete.status === "ACTIVE") current.active += 1;
@@ -199,7 +210,7 @@ export default async function DashboardPage() {
   }
   for (const payment of payments) {
     if (payment.payment_status === "CANCELLED") continue;
-    const key = payment.cakra || "Tidak tersedia";
+    const key = normalizeCakra(payment.cakra);
     const current = cakraSummary.get(key) ?? { athletes: 0, active: 0, registrations: 0, bills: 0, paid: 0, remaining: 0, attPresent: 0, attTotal: 0 };
     current.registrations += 1;
     current.bills += Number(payment.total_amount || 0);
@@ -213,7 +224,17 @@ export default async function DashboardPage() {
     current.attTotal += att.total;
     cakraSummary.set(key, current);
   }
-  const cakraRows = Array.from(cakraSummary.entries()).sort(([a], [b]) => a.localeCompare(b));
+  // Baris akhir: seluruh Cakra kanonik tampil (termasuk yang datanya 0), lalu
+  // nilai non-kanonik apa pun di belakangnya — tanpa mengarang grup baru.
+  const canonicalOrder = [...CAKRA_GROUPS].sort((a, b) => a.localeCompare(b));
+  type CakraRow = { athletes: number; active: number; registrations: number; bills: number; paid: number; remaining: number; attPresent: number; attTotal: number };
+  const emptyCakraRow: CakraRow = { athletes: 0, active: 0, registrations: 0, bills: 0, paid: 0, remaining: 0, attPresent: 0, attTotal: 0 };
+  const cakraRows: [string, CakraRow][] = [
+    ...canonicalOrder.map((c) => [c, cakraSummary.get(c) ?? emptyCakraRow] as [string, CakraRow]),
+    ...Array.from(cakraSummary.entries())
+      .filter(([k]) => !(canonicalOrder as readonly string[]).includes(k))
+      .map(([k, v]) => [k, v] as [string, CakraRow]),
+  ];
 
   // ===== Kehadiran hari ini =====
   const sessionIds = (todaySessions ?? []).map((s) => s.id);
@@ -264,24 +285,22 @@ export default async function DashboardPage() {
   const isAdmin = scopedRole === "admin";
   const firstName = (currentProfile?.full_name || "").split(" ")[0] || "Admin";
 
-  const quickActions = [
-    ...(isAdmin ? [{ href: "/atlet", label: "Tambah Atlet" }, { href: "/event-settings", label: "Buat Event" }] : []),
-    { href: "/events", label: "Tambah Pendaftaran" },
-    ...(isAdmin ? [{ href: "/keuangan", label: "Verifikasi Pembayaran" }, { href: "/accounts", label: "Buat Akun" }, { href: "/import-export", label: "Export Data" }] : []),
+  const primaryAction = isAdmin ? { href: "/atlet", label: "Tambah Atlet" } : null;
+  const secondaryActions = [
+    ...(isAdmin ? [{ href: "/event-settings", label: "Buat Event" }, { href: "/keuangan?status=MENUNGGU_VERIFIKASI", label: "Verifikasi Pembayaran" }, { href: "/import-export", label: "Export Data" }] : []),
+    ...(isAdmin ? [] : [{ href: "/events", label: "Tambah Pendaftaran" }]),
+  ];
+  const moreActions = [
+    ...(isAdmin ? [{ href: "/events", label: "Tambah Pendaftaran" }, { href: "/accounts", label: "Buat Akun" }] : []),
   ];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 pt-14 lg:pt-0">
+    <div className="section-gap mx-auto max-w-6xl space-y-8 pt-14 lg:pt-0">
       {/* Header */}
       <header className="page-header !mb-0">
         <div>
-          <p className="text-sm font-medium text-slate-500">
-            {greeting(now.getHours())}, {firstName}
-          </p>
-          <h1 className="page-title flex items-center gap-2">
-            TEAM CAKRA SWIMMING
-            <span aria-hidden className="hidden sm:inline-block h-2 w-2 rounded-full bg-brand-500" />
-          </h1>
+          <p className="page-title">{greeting(now.getHours())}, {firstName}</p>
+          <p className="mt-0.5 text-sm font-medium text-slate-500">TEAM CAKRA SWIMMING</p>
           <p className="page-subtitle">
             {DAY_NAMES[todayDow]}, {now.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
             {scopedRole === "ketua_kelompok" && <> • <span className="font-medium text-brand-700">Ketua Kelompok</span></>}
@@ -292,25 +311,87 @@ export default async function DashboardPage() {
         )}
       </header>
 
-      {/* Quick actions */}
-      <nav aria-label="Aksi cepat" className="flex flex-wrap gap-2">
-        {quickActions.map((a) => (
-          <Link key={a.href + a.label} href={a.href} className="btn-secondary text-xs sm:text-sm">
-            <span aria-hidden className="text-brand-600 font-bold">+</span> {a.label}
-          </Link>
-        ))}
-      </nav>
+      {/* Action area — satu aksi utama, beberapa sekunder, sisanya terlipat */}
+      {(primaryAction || secondaryActions.length > 0) && (
+        <nav aria-label="Aksi cepat" className="flex flex-wrap items-center gap-2">
+          {primaryAction && (
+            <Link href={primaryAction.href} className="btn-primary text-sm">
+              <span aria-hidden className="font-bold">+</span> {primaryAction.label}
+            </Link>
+          )}
+          {secondaryActions.map((a) => (
+            <Link key={a.href + a.label} href={a.href} className="btn-secondary text-sm">
+              {a.label}
+            </Link>
+          ))}
+          {moreActions.length > 0 && (
+            <details className="relative">
+              <summary className="btn-ghost cursor-pointer select-none text-sm [&::-webkit-details-marker]:hidden">
+                Lainnya <span aria-hidden className="text-xs">▾</span>
+              </summary>
+              <div className="absolute left-0 top-full z-10 mt-1 w-48 rounded-xl border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                {moreActions.map((a) => (
+                  <Link key={a.href + a.label} href={a.href} className="block rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-brand-50 hover:text-brand-800 dark:text-slate-200 dark:hover:bg-slate-700">
+                    {a.label}
+                  </Link>
+                ))}
+              </div>
+            </details>
+          )}
+        </nav>
+      )}
+
+      {/* Work queue — tugas yang menunggu aksi, prioritas di atas metrik */}
+      {isStaff && (
+        <section aria-label="Perlu tindakan" className="space-y-2">
+          <h2 className="card-title">Perlu Tindakan</h2>
+          {(pendingCount + unpaidCount + commStats?.failed! ) > 0 ? (
+            <ul className="grid gap-2 md:grid-cols-3">
+              <li>
+                <Link href="/keuangan?status=MENUNGGU_VERIFIKASI" className={`card-flat flex items-center justify-between gap-2 transition-colors hover:border-brand-400 ${queueTone(commStats?.failed ?? 0, pendingCount)}`}>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-navy-900">{pendingCount} pembayaran menunggu verifikasi</span>
+                    <span className="text-xs text-slate-500">Cek bukti transfer lalu setujui/tolak</span>
+                  </span>
+                  <ChevronRight aria-hidden className="h-4 w-4 shrink-0 text-slate-400" />
+                </Link>
+              </li>
+              <li>
+                <Link href="/registrations?pay=BELUM_BAYAR" className="card-flat flex items-center justify-between gap-2 transition-colors hover:border-brand-400">
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-navy-900">{unpaidCount} pendaftaran belum bayar</span>
+                    <span className="text-xs text-slate-500">Ingatkan atlet/orang tua lewat Komunikasi</span>
+                  </span>
+                  <ChevronRight aria-hidden className="h-4 w-4 shrink-0 text-slate-400" />
+                </Link>
+              </li>
+              <li>
+                <Link href="/communication" className={`card-flat flex items-center justify-between gap-2 ${commStats && commStats.failed > 0 ? "border-red-300 bg-red-50/60" : ""}`}>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-navy-900">{commStats?.failed ?? 0} pengiriman notifikasi gagal</span>
+                    <span className="text-xs text-slate-500">Retry manual dari halaman Komunikasi</span>
+                  </span>
+                  <ChevronRight aria-hidden className="h-4 w-4 shrink-0 text-slate-400" />
+                  <span className="sr-only">Jika ada kegagalan, kartu merah = prioritas tinggi</span>
+                </Link>
+              </li>
+            </ul>
+          ) : (
+            <p className="card-flat text-sm text-slate-500">Semua tugas beres — tidak ada antrean. 🎉</p>
+          )}
+        </section>
+      )}
 
       {/* 8 KPI */}
       <section aria-label="Ringkasan klub" className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatCard label="Total Atlet" value={totalAthletes} />
-        <StatCard label="Atlet Aktif" value={activeAthletes} accent="text-emerald-600" />
-        <StatCard label="Event Aktif" value={openEventCount} accent="text-brand-700" />
-        <StatCard label="Total Pendaftar" value={totalRegistrations} accent="text-navy-700" />
-        <StatCard label="Menunggu Pembayaran" value={unpaidCount} accent="text-red-600" />
-        <StatCard label="Menunggu Verifikasi" value={pendingCount} accent="text-amber-600" />
-        <StatCard label="Total Pembayaran" value={`${transactionCount} transaksi`} accent="text-sky-600" />
-        <StatCard label="Total Pendapatan" value={rupiah(totalRevenue)} accent="text-emerald-600" hint={`Tagihan ${rupiah(finBills)}`} />
+        <StatCard label="Total Atlet" value={totalAthletes} hint={`${activeAthletes} aktif`} />
+        <StatCard label="Atlet Aktif" value={activeAthletes} />
+        <StatCard label="Event Aktif" value={openEventCount} />
+        <StatCard label="Total Pendaftar" value={totalRegistrations} />
+        <StatCard label="Menunggu Pembayaran" value={unpaidCount} tone="text-red-600 dark:text-red-400" />
+        <StatCard label="Menunggu Verifikasi" value={pendingCount} tone="text-amber-600 dark:text-amber-400" />
+        <StatCard label="Total Pembayaran" value={`${transactionCount}`} hint="transaksi tercatat" />
+        <StatCard label="Total Pendapatan" value={rupiah(totalRevenue)} tone="text-emerald-700 dark:text-emerald-400" hint={`Tagihan ${rupiah(finBills)}`} />
       </section>
 
       {/* Financial + Activity */}
@@ -329,13 +410,13 @@ export default async function DashboardPage() {
                 </div>
               </div>
             ))}
-            <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 text-center">
-              <div><p className="stat-label">Verifikasi</p><p className="text-lg font-bold text-amber-600">{statusCount("MENUNGGU_VERIFIKASI")}</p></div>
-              <div><p className="stat-label">Lunas</p><p className="text-lg font-bold text-brand-600">{statusCount("LUNAS")}</p></div>
-              <div><p className="stat-label">DP</p><p className="text-lg font-bold text-sky-600">{statusCount("DP")}</p></div>
-              <div><p className="stat-label">Belum Bayar</p><p className="text-lg font-bold text-red-600">{statusCount("BELUM_BAYAR")}</p></div>
-              <div><p className="stat-label">Ditolak</p><p className="text-lg font-bold text-slate-500">{statusCount("DITOLAK")}</p></div>
-              <div><p className="stat-label">Batal</p><p className="text-lg font-bold text-slate-400">{statusCount("CANCELLED")}</p></div>
+            <div className="grid grid-cols-3 gap-x-2 gap-y-1.5 border-t border-slate-100 pt-3 sm:grid-cols-6">
+              <div><p className="text-xs text-slate-500">Verifikasi</p><p className="text-sm font-semibold text-navy-900">{statusCount("MENUNGGU_VERIFIKASI")}</p></div>
+              <div><p className="text-xs text-slate-500">Lunas</p><p className="text-sm font-semibold text-navy-900">{statusCount("LUNAS")}</p></div>
+              <div><p className="text-xs text-slate-500">DP</p><p className="text-sm font-semibold text-navy-900">{statusCount("DP")}</p></div>
+              <div><p className="text-xs text-red-600 dark:text-red-400">Belum Bayar</p><p className="text-sm font-semibold text-navy-900">{statusCount("BELUM_BAYAR")}</p></div>
+              <div><p className="text-xs text-slate-500">Ditolak</p><p className="text-sm font-semibold text-slate-400">{statusCount("DITOLAK")}</p></div>
+              <div><p className="text-xs text-slate-500">Batal</p><p className="text-sm font-semibold text-slate-400">{statusCount("CANCELLED")}</p></div>
             </div>
           </div>
         </div>
@@ -346,9 +427,9 @@ export default async function DashboardPage() {
             {isAdmin && <Link href="/audit" className="text-xs font-medium text-brand-700 hover:underline">Semua log</Link>}
           </div>
           {(auditLogs ?? []).length === 0 ? (
-            <p className="mt-4 text-sm text-slate-500">Belum ada aktivitas tercatat.</p>
+            <p className="py-2 text-sm text-slate-500">Belum ada aktivitas terbaru.</p>
           ) : (
-            <ul className="mt-3 divide-y divide-slate-100">
+            <ul className="mt-1 divide-y divide-slate-100">
               {(auditLogs ?? []).map((l) => {
                 const actor = (l.profiles as { full_name?: string } | null)?.full_name ?? "System";
                 return (
@@ -369,7 +450,7 @@ export default async function DashboardPage() {
       {/* Event overview */}
       <section aria-label="Overview event" className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="card-title !text-base !normal-case !tracking-normal font-semibold text-navy-900">Event Overview</h2>
+          <h2 className="text-base font-semibold text-navy-900">Event Overview</h2>
           {isAdmin && <Link href="/event-settings" className="text-xs font-medium text-brand-700 hover:underline">Kelola event</Link>}
         </div>
         {eventRows.length === 0 ? (
@@ -398,7 +479,7 @@ export default async function DashboardPage() {
                     <div><dt className="stat-label">Belum</dt><dd className="text-sm font-bold text-red-600">{e.stat.unpaid}</dd></div>
                     <div><dt className="stat-label">Verif.</dt><dd className="text-sm font-bold text-amber-600">{e.stat.pending}</dd></div>
                   </dl>
-                  <div className="mt-3"><Link href={`/events/${e.id}`} className="btn-secondary px-3 py-1.5 text-xs">View Event</Link></div>
+                  <div className="mt-3"><Link href={`/events/${e.id}`} className="btn-secondary px-3 py-1.5 text-xs">Lihat Event</Link></div>
                 </article>
               ))}
               {openEvents.length === 0 && <p className="text-sm text-slate-500">Tidak ada event berstatus OPEN saat ini.</p>}
@@ -427,7 +508,7 @@ export default async function DashboardPage() {
 
       {/* Cakra overview */}
       <section className="card overflow-x-auto">
-        <h2 className="card-title mb-3 !text-base !normal-case !tracking-normal font-semibold text-navy-900">Cakra Overview</h2>
+        <h2 className="mb-3 text-base font-semibold text-navy-900">Cakra Overview</h2>
         {cakraRows.length === 0 ? (
           <p className="text-sm text-slate-500">Belum ada data Cakra.</p>
         ) : (
@@ -454,7 +535,7 @@ export default async function DashboardPage() {
       {/* Performance overview */}
       <section aria-label="Performance overview" className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="card-title !text-base !normal-case !tracking-normal font-semibold text-navy-900">Performance Overview</h2>
+          <h2 className="text-base font-semibold text-navy-900">Performance Overview</h2>
           <Link href="/performance" className="btn-secondary px-3 py-1.5 text-xs">Kelola Performance</Link>
         </div>
         {(() => {
@@ -474,7 +555,7 @@ export default async function DashboardPage() {
           const byCakraPerf = new Map<string, { athletes: Set<string>; results: number; improved: number }>();
           for (const r of perf) {
             const a = Array.isArray(r.athletes) ? r.athletes[0] : r.athletes;
-            const ck = a?.cakra || "Tanpa Cakra";
+            const ck = normalizeCakra(a?.cakra);
             const cur = byCakraPerf.get(ck) ?? { athletes: new Set<string>(), results: 0, improved: 0 };
             cur.results += 1;
             cur.athletes.add(r.athlete_id);
@@ -482,12 +563,12 @@ export default async function DashboardPage() {
           }
           return (
             <>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                <div className="stat-card"><p className="stat-label">Total Hasil Tercatat</p><p className="stat-value">{perf.length}</p></div>
-                <div className="stat-card"><p className="stat-label">Atlet dengan PB Baru</p><p className="stat-value text-brand-600">{pbKeys.size}</p></div>
-                <div className="stat-card"><p className="stat-label">Atlet Berprestasi Aktif</p><p className="stat-value">{byCakraPerf.size > 0 ? Array.from(byCakraPerf.values()).reduce((n, v) => n + v.athletes.size, 0) : 0}</p></div>
-                <div className="stat-card"><p className="stat-label">Hasil Bulan Ini</p><p className="stat-value">{thisMonth}</p></div>
-              </div>
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-xl border border-slate-200 bg-white px-4 py-3 sm:grid-cols-4 dark:border-slate-700 dark:bg-slate-800">
+                <div className="flex items-baseline justify-between gap-2"><dt className="text-sm text-slate-500">Hasil tercatat</dt><dd className="text-lg font-bold text-navy-900">{perf.length}</dd></div>
+                <div className="flex items-baseline justify-between gap-2"><dt className="text-sm text-slate-500">Atlet dengan PB baru</dt><dd className="text-lg font-bold text-navy-900">{pbKeys.size}</dd></div>
+                <div className="flex items-baseline justify-between gap-2"><dt className="text-sm text-slate-500">Atlet berprestasi</dt><dd className="text-lg font-bold text-navy-900">{byCakraPerf.size > 0 ? Array.from(byCakraPerf.values()).reduce((n, v) => n + v.athletes.size, 0) : 0}</dd></div>
+                <div className="flex items-baseline justify-between gap-2"><dt className="text-sm text-slate-500">Hasil bulan ini</dt><dd className="text-lg font-bold text-navy-900">{thisMonth}</dd></div>
+              </dl>
               {perf.length === 0 ? (
                 <div className="empty-state">
                   <p className="empty-state-title">Belum ada hasil performance tercatat.</p>
@@ -501,11 +582,9 @@ export default async function DashboardPage() {
                       {Array.from(byCakraPerf.entries()).map(([name, v]) => {
                         const perAthleteBest = new Map<string, number>();
                         let improvements = 0;
-                        const chrono = perf.filter((r) => (Array.isArray(r.athletes) ? r.athletes[0] : r.athletes)?.cakra === name.replace(/^Tanpa Cakra$/, "Tanpa Cakra")).sort((x, y) => x.recorded_at.localeCompare(y.recorded_at));
-                        void chrono;
                         for (const r of perf) {
                           const a = Array.isArray(r.athletes) ? r.athletes[0] : r.athletes;
-                          if ((a?.cakra || "Tanpa Cakra") !== name) continue;
+                          if (normalizeCakra(a?.cakra) !== name) continue;
                           if (r.time_cs == null) continue;
                           const k = `${r.athlete_id}|${r.stroke}|${r.distance}`;
                           const prev = perAthleteBest.get(k);
@@ -534,15 +613,15 @@ export default async function DashboardPage() {
       {isStaff && (
         <section aria-label="Communication overview" className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="section-title">Communication Overview</h2>
+            <h2 className="text-base font-semibold text-navy-900">Communication Overview</h2>
             <a href="/communication" className="text-sm text-brand-700 hover:underline dark:text-brand-300">Kelola →</a>
           </div>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <div className="stat-card"><p className="stat-label">Notifikasi Belum Dibaca</p><p className="stat-value">{commStats?.unread ?? 0}</p></div>
-            <div className="stat-card"><p className="stat-label">Reminder Terkirim (7h)</p><p className="stat-value">{commStats?.reminders ?? 0}</p></div>
-            <div className="stat-card"><p className="stat-label">Pengingat Bayar Pending</p><p className="stat-value text-amber-600 dark:text-amber-400">{commStats?.pendingPay ?? 0}</p></div>
-            <div className="stat-card"><p className="stat-label">Deadline ≤7 Hari</p><p className="stat-value text-sky-600 dark:text-sky-400">{commStats?.deadlines ?? 0}</p></div>
-          </div>
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-xl border border-slate-200 bg-white px-4 py-3 sm:grid-cols-4 dark:border-slate-700 dark:bg-slate-800">
+            <div className="flex items-baseline justify-between gap-2"><dt className="text-sm text-slate-500">Belum dibaca</dt><dd className="text-lg font-bold text-navy-900">{commStats?.unread ?? 0}</dd></div>
+            <div className="flex items-baseline justify-between gap-2"><dt className="text-sm text-slate-500">Reminder terkirim (7h)</dt><dd className="text-lg font-bold text-navy-900">{commStats?.reminders ?? 0}</dd></div>
+            <div className="flex items-baseline justify-between gap-2"><dt className="text-sm text-slate-500">Pengingat bayar pending</dt><dd className={`text-lg font-bold ${(commStats?.pendingPay ?? 0) > 0 ? "text-amber-600 dark:text-amber-400" : "text-navy-900"}`}>{commStats?.pendingPay ?? 0}</dd></div>
+            <div className="flex items-baseline justify-between gap-2"><dt className="text-sm text-slate-500">Deadline ≤7 hari</dt><dd className={`text-lg font-bold ${(commStats?.deadlines ?? 0) > 0 ? "text-brand-700 dark:text-brand-300" : "text-navy-900"}`}>{commStats?.deadlines ?? 0}</dd></div>
+          </dl>
         </section>
       )}
 
@@ -555,7 +634,7 @@ export default async function DashboardPage() {
       {/* Sesi hari ini + kehadiran */}
       <div className="card">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="card-title !text-base !normal-case !tracking-normal font-semibold text-navy-900">Sesi Latihan Hari Ini</h2>
+          <h2 className="text-base font-semibold text-navy-900">Sesi Latihan Hari Ini</h2>
           <div className="flex gap-2 text-xs">
             <span className="badge-success badge">Hadir {present}</span>
             <span className="badge-warning badge">Izin {excused} / Sakit {sick}</span>
