@@ -2,17 +2,20 @@ export default function StatCard({
   label,
   value,
   hint,
-  accent = "text-brand-700",
+  tone,
 }: {
   label: string;
   value: string | number;
   hint?: string;
-  accent?: string;
+  /** Warna semantik opsional (success/warning/danger); default netral agar angka yang jadi fokus. */
+  tone?: string;
 }) {
   return (
-    <div className="card">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={`mt-1 text-2xl font-bold ${accent}`}>{value}</p>
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-card">
+      <p className="text-sm font-medium text-slate-500">{label}</p>
+      <p className={`mt-0.5 text-[28px] font-bold leading-tight tracking-tight text-navy-900 ${tone ?? ""}`}>
+        {value}
+      </p>
       {hint && <p className="mt-0.5 text-xs text-slate-400">{hint}</p>}
     </div>
   );

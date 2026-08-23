@@ -19,36 +19,76 @@ interface NavItem {
   roles: Role[];
 }
 
-const ALL: Role[] = ["admin", "operator", "coach", "group_leader", "ketua_kelompok", "athlete", "parent"];
+interface NavSection {
+  /** Label kategori; undefined = tanpa heading (grup utama). */
+  label?: string;
+  items: NavItem[];
+}
 
-const NAV: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ALL },
-  { href: "/atlet", label: "Atlet", icon: Users, roles: ALL },
-  { href: "/kelompok", label: "Kelompok Latihan", icon: UsersRound, roles: ["admin", "operator", "coach", "group_leader", "ketua_kelompok"] },
-  { href: "/jadwal", label: "Jadwal", icon: CalendarDays, roles: ALL },
-  { href: "/events", label: "Events", icon: CalendarRange, roles: ALL },
-  { href: "/registrations", label: "Pendaftaran", icon: ClipboardList, roles: ["admin", "operator", "coach", "group_leader", "ketua_kelompok"] },
-  { href: "/performance", label: "Performance", icon: Timer, roles: ["admin", "operator", "coach", "group_leader", "ketua_kelompok"] },
-  { href: "/communication", label: "Komunikasi", icon: Radio, roles: ["admin", "operator"] },
-  { href: "/event-settings", label: "Event Settings", icon: Settings, roles: ["admin"] },
-  { href: "/absensi", label: "Absensi", icon: ClipboardCheck, roles: ["admin", "operator", "coach", "group_leader", "ketua_kelompok"] },
-  { href: "/laporan", label: "Laporan", icon: BarChart3, roles: ["admin", "operator", "coach", "group_leader", "ketua_kelompok"] },
-  { href: "/keuangan", label: "Keuangan", icon: Wallet, roles: ["admin"] },
-  { href: "/reports", label: "Report Center", icon: FileBarChart, roles: ["admin"] },
-  { href: "/notifications", label: "Notifikasi", icon: Bell, roles: ALL },
-  { href: "/import-export", label: "Import / Export", icon: FileSpreadsheet, roles: ["admin", "operator"] },
-  { href: "/users", label: "Users", icon: UserCog, roles: ["admin"] },
-  { href: "/accounts", label: "Account Management", icon: UserCog, roles: ["admin"] },
-  { href: "/settings", label: "Settings", icon: Settings, roles: ["admin"] },
-  { href: "/audit", label: "Audit Logs", icon: ScrollText, roles: ["admin"] },
+const ALL: Role[] = ["admin", "operator", "coach", "group_leader", "ketua_kelompok", "athlete", "parent"];
+const STAFF: Role[] = ["admin", "operator", "coach", "group_leader", "ketua_kelompok"];
+const ADMIN: Role[] = ["admin"];
+
+/** Menu dikelompokkan per kategori agar mudah dipindai; tidak ada menu yang dihilangkan. */
+const NAV_SECTIONS: NavSection[] = [
+  { items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ALL }] },
+  {
+    label: "Operasional",
+    items: [
+      { href: "/atlet", label: "Atlet", icon: Users, roles: ALL },
+      { href: "/kelompok", label: "Kelompok Latihan", icon: UsersRound, roles: STAFF },
+      { href: "/jadwal", label: "Jadwal", icon: CalendarDays, roles: ALL },
+      { href: "/absensi", label: "Absensi", icon: ClipboardCheck, roles: STAFF },
+    ],
+  },
+  {
+    label: "Event",
+    items: [
+      { href: "/events", label: "Events", icon: CalendarRange, roles: ALL },
+      { href: "/registrations", label: "Pendaftaran", icon: ClipboardList, roles: STAFF },
+      { href: "/event-settings", label: "Event Settings", icon: Settings, roles: ADMIN },
+    ],
+  },
+  {
+    label: "Performance",
+    items: [{ href: "/performance", label: "Performance", icon: Timer, roles: STAFF }],
+  },
+  {
+    label: "Keuangan & Laporan",
+    items: [
+      { href: "/keuangan", label: "Keuangan", icon: Wallet, roles: ADMIN },
+      { href: "/laporan", label: "Laporan Kehadiran", icon: BarChart3, roles: STAFF },
+      { href: "/reports", label: "Report Center", icon: FileBarChart, roles: ADMIN },
+      { href: "/import-export", label: "Import / Export", icon: FileSpreadsheet, roles: ["admin", "operator"] },
+    ],
+  },
+  {
+    label: "Komunikasi",
+    items: [
+      { href: "/communication", label: "Komunikasi", icon: Radio, roles: ["admin", "operator"] },
+      { href: "/notifications", label: "Notifikasi", icon: Bell, roles: ALL },
+    ],
+  },
+  {
+    label: "Sistem",
+    items: [
+      { href: "/users", label: "Users", icon: UserCog, roles: ADMIN },
+      { href: "/accounts", label: "Account Management", icon: UserCog, roles: ADMIN },
+      { href: "/settings", label: "Settings", icon: Settings, roles: ADMIN },
+      { href: "/audit", label: "Audit Logs", icon: ScrollText, roles: ADMIN },
+    ],
+  },
 ];
+
+/** 5 item pertama (setelah filter role) untuk bottom nav mobile. */
+const FLAT_NAV: NavItem[] = NAV_SECTIONS.flatMap((s) => s.items);
 
 export default function Sidebar({ role, userName }: { role: Role; userName: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
 
-  const items = NAV.filter((i) => i.roles.includes(role));
+  const sections = NAV_SECTIONS.map((s) => ({ ...s, items: s.items.filter((i) => i.roles.includes(role)) })).filter((s) => s.items.length > 0);
 
   async function logout() {
     await supabase.auth.signOut();
@@ -57,7 +97,7 @@ export default function Sidebar({ role, userName }: { role: Role; userName: stri
   }
 
   const linkCls = (href: string) =>
-    `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+    `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
       pathname === href || pathname.startsWith(href + "/")
         ? "bg-brand-600 text-white shadow"
         : "text-slate-600 hover:bg-brand-50 hover:text-brand-800"
@@ -75,12 +115,23 @@ export default function Sidebar({ role, userName }: { role: Role; userName: stri
             <p className="text-sm font-bold text-brand-900">TEAM CAKRA SWIMMING</p>
           </div>
         </div>
-        <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-          {items.map((i) => (
-            <Link key={i.href} href={i.href} className={linkCls(i.href)}>
-              <i.icon className="h-4 w-4" />
-              {i.label}
-            </Link>
+        <nav className="flex-1 overflow-y-auto px-3 py-3">
+          {sections.map((s, si) => (
+            <div key={s.label ?? `sec-${si}`} className={si > 0 ? "mt-4" : ""}>
+              {s.label && (
+                <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                  {s.label}
+                </p>
+              )}
+              <div className="space-y-0.5">
+                {s.items.map((i) => (
+                  <Link key={i.href} href={i.href} className={linkCls(i.href)}>
+                    <i.icon className="h-4 w-4" />
+                    {i.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
         <div className="border-t border-slate-100 p-3">
@@ -110,7 +161,7 @@ export default function Sidebar({ role, userName }: { role: Role; userName: stri
 
       {/* Mobile bottom nav — 5 item pertama sesuai role */}
       <nav className="fixed inset-x-0 bottom-0 z-20 flex justify-around border-t border-slate-200 bg-white py-2 lg:hidden">
-        {items.slice(0, 5).map((i) => (
+        {FLAT_NAV.filter((i) => i.roles.includes(role)).slice(0, 5).map((i) => (
           <Link
             key={i.href}
             href={i.href}
