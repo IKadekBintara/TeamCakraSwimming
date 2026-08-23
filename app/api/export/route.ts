@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import * as XLSX from "xlsx";
 import { ATTENDANCE_LABELS, DAY_NAMES, STATUS_LABELS } from "@/types";
 import { calculateDolphinKu } from "@/lib/events";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -16,6 +17,8 @@ export async function GET(req: NextRequest) {
   };
 
   try {
+  const rl = rateLimit(req, "export", 12);
+  if (rl) return rl;
   stage = "auth";
   log("stage=auth");
   const supabase = createClient();

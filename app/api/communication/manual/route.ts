@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { notifyInApp } from "@/lib/notifications/service";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * POST /api/communication/manual — kirim notifikasi manual ke role (admin/operator).
@@ -12,6 +13,8 @@ import { notifyInApp } from "@/lib/notifications/service";
 const ALLOWED_ROLES = ["parent", "athlete", "coach", "group_leader", "ketua_kelompok", "operator", "admin"];
 
 export async function POST(req: NextRequest) {
+  const rl = rateLimit(req, "comm-manual", 10);
+  if (rl) return rl;
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

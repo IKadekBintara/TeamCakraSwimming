@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * POST /api/communication/retry — retry delivery yang gagal (admin/operator).
@@ -8,6 +9,8 @@ import { createServiceClient } from "@/lib/supabase/service";
  * Hanya FAILED dengan attempts < 3 yang boleh di-retry. Audit: RETRY_NOTIFICATION.
  */
 export async function POST(req: NextRequest) {
+  const rl = rateLimit(req, "comm-retry", 10);
+  if (rl) return rl;
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { Role } from "@/types";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -115,6 +116,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const rlCreate = rateLimit(request, "accounts-post", 20);
+  if (rlCreate) return rlCreate;
   const ctx = await adminContext();
   if (ctx.error === "UNAUTHENTICATED") return responseError("Sesi login diperlukan", 401);
   if (ctx.error === "FORBIDDEN") return responseError("Hanya admin yang dapat mengelola akun", 403);
@@ -146,6 +149,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const rlPatch = rateLimit(request, "accounts-patch", 20);
+  if (rlPatch) return rlPatch;
   const ctx = await adminContext();
   if (ctx.error === "UNAUTHENTICATED") return responseError("Sesi login diperlukan", 401);
   if (ctx.error === "FORBIDDEN") return responseError("Hanya admin yang dapat mengelola akun", 403);

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { rateLimit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -14,6 +15,8 @@ async function adminContext() {
 }
 
 export async function PATCH(request: NextRequest) {
+  const rl = rateLimit(request, "payment-settings", 20);
+  if (rl) return rl;
   const ctx = await adminContext();
   if ("error" in ctx) return NextResponse.json({ error: ctx.error === 401 ? "Sesi login diperlukan" : "Admin only" }, { status: ctx.error });
   const body = await request.json().catch(() => null);

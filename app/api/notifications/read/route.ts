@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * POST /api/notifications/read
@@ -7,6 +8,8 @@ import { createClient } from "@/lib/supabase/server";
  * User hanya dapat menandai notifikasi miliknya sendiri (RLS + filter ganda).
  */
 export async function POST(req: NextRequest) {
+  const rl = rateLimit(req, "notif-read", 60);
+  if (rl) return rl;
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
