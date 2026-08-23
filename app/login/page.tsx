@@ -52,34 +52,37 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col bg-gradient-to-b from-brand-50 via-white to-navy-50">
-      {/* Aquatic depth lines — subtle pool-lane motif */}
-      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-64 overflow-hidden">
-        <div className="absolute -top-24 left-1/2 h-96 w-[120%] -translate-x-1/2 rounded-[100%] bg-brand-100/50 blur-3xl" />
+    <main className="relative flex min-h-screen flex-col bg-navy-900 dark:bg-navy-950">
+      {/* Cahaya air yang halus — satu aksen, bukan gradient seluruh halaman */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -top-32 left-1/2 h-72 w-[42rem] max-w-[140vw] -translate-x-1/2 rounded-full bg-brand-500/10 blur-3xl" />
+        <div className="absolute -bottom-40 -left-24 h-80 w-80 rounded-full bg-navy-500/10 blur-3xl" />
       </div>
 
+      {/* TOP — branding */}
       <div className="relative z-10 flex items-center justify-between p-4 sm:p-6">
-        <span className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-800">Team Cakra Swimming</span>
+        <span className="text-xs font-semibold uppercase tracking-[0.22em] text-white">
+          Team Cakra Swimming
+        </span>
         <ThemeToggle compact />
       </div>
 
-      <div className="relative z-10 flex flex-1 items-center justify-center px-4 pb-16">
+      {/* CENTER — logo, judul, form */}
+      <div className="relative z-10 flex flex-1 items-center justify-center px-4 py-8">
         <div className="w-full max-w-sm">
-          <div className="mb-8 text-center">
-            <div className="mx-auto mb-5 flex h-36 w-36 items-center justify-center sm:h-40 sm:w-40">
-              <Image
-                src="/brand/team-cakra-logo.png"
-                alt="Logo TEAM CAKRA SWIMMING"
-                width={160}
-                height={160}
-                className="h-full w-full object-contain drop-shadow-xl"
-                priority
-              />
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight text-navy-900">
+          <div className="mb-7 text-center">
+            <Image
+              src="/brand/team-cakra-logo.png"
+              alt="Logo TEAM CAKRA SWIMMING"
+              width={144}
+              height={144}
+              className="mx-auto h-28 w-auto sm:h-32"
+              priority
+            />
+            <h1 className="mt-4 text-2xl font-bold tracking-tight text-white">
               TEAM CAKRA SWIMMING
             </h1>
-            <p className="mt-2 text-sm text-slate-600">
+            <p className="mt-1.5 text-sm text-navy-200">
               Sistem Manajemen Atlet, Absensi, Event &amp; Pembayaran
             </p>
           </div>
@@ -99,7 +102,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="card space-y-4 py-6 shadow-lg">
+          <form onSubmit={handleSubmit} className="card space-y-4 shadow-lg">
             <div className="space-y-1">
               <h2 className="text-base font-semibold text-navy-900">
                 {mode === "login" ? "Masuk ke akun Anda" : "Buat akun baru"}
@@ -166,12 +169,15 @@ export default function LoginPage() {
                 : "Sudah punya akun? Masuk"}
             </button>
           </form>
-
-          <p className="mt-6 text-center text-xs text-slate-400">
-            © {new Date().getFullYear()} Team Cakra Swimming
-          </p>
         </div>
       </div>
+
+      {/* BOTTOM — copyright */}
+      <footer className="relative z-10 pb-5 text-center">
+        <p className="text-xs text-navy-300">
+          © {new Date().getFullYear()} TEAM CAKRA SWIMMING
+        </p>
+      </footer>
     </main>
   );
 }

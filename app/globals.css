@@ -166,8 +166,12 @@ body { transition: background-color 160ms ease, color 160ms ease; }
 .dark .bg-brand-50\/60 { background-color: rgb(13 53 41 / 0.6); }
 .dark .bg-red-50 { background-color: #3f1d26; }
 .dark .bg-red-100 { background-color: #7f1d1d; }
+.dark .bg-red-50\/60 { background-color: rgb(63 29 38 / 0.6); }
 .dark .bg-amber-50 { background-color: #422006; }
 .dark .bg-amber-100 { background-color: #78350f; }
+.dark .bg-amber-50\/40 { background-color: rgb(66 32 6 / 0.4); }
+.dark .border-red-300 { border-color: #9f3039; }
+.dark .border-amber-300 { border-color: #a16207; }
 .dark .bg-emerald-50 { background-color: #064e3b; }
 .dark .bg-emerald-100 { background-color: #065f46; }
 .dark .bg-sky-50 { background-color: #082f49; }
