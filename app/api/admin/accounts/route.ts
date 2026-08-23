@@ -6,8 +6,8 @@ import { rateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
-const MANAGEABLE_ROLES: Role[] = ["admin", "coach", "parent", "ketua_kelompok", "group_leader"];
-const CREATABLE_ROLES: Role[] = ["admin", "coach", "parent", "ketua_kelompok"];
+const MANAGEABLE_ROLES: Role[] = ["admin", "operator", "coach", "parent", "ketua_kelompok", "group_leader", "athlete"];
+const CREATABLE_ROLES: Role[] = ["admin", "coach", "parent", "ketua_kelompok", "athlete"];
 const STATUSES = ["ACTIVE", "INACTIVE", "SUSPENDED", "DELETED"] as const;
 type AccountStatus = (typeof STATUSES)[number];
 
@@ -63,11 +63,12 @@ export async function GET(request: NextRequest) {
   const status = request.nextUrl.searchParams.get("status") || "ALL";
   const sort = request.nextUrl.searchParams.get("sort") || "newest";
 
-  const [{ data: profiles, error: profileError }, { data: authData, error: authError }, { data: recentActivity }, { data: groups }] = await Promise.all([
+  const [{ data: profiles, error: profileError }, { data: authData, error: authError }, { data: recentActivity }, { data: groups }, { data: linkedAthletes }] = await Promise.all([
     service.from("profiles").select("id, full_name, role, phone, account_status, force_password_reset, created_at, updated_at").order("created_at", { ascending: false }),
     service.auth.admin.listUsers({ page: 1, perPage: 1000 }),
-    service.from("audit_logs").select("id, action, entity_id, created_at, profiles(full_name)").in("action", ["CREATE_ACCOUNT", "UPDATE_ACCOUNT", "CHANGE_ROLE", "RESET_PASSWORD", "DISABLE_ACCOUNT", "ENABLE_ACCOUNT", "DELETE_ACCOUNT", "RESTORE_ACCOUNT"]).order("created_at", { ascending: false }).limit(8),
+    service.from("audit_logs").select("id, action, entity_id, created_at, profiles(full_name)").in("action", ["CREATE_ACCOUNT", "UPDATE_ACCOUNT", "CHANGE_ROLE", "RESET_PASSWORD", "DISABLE_ACCOUNT", "ENABLE_ACCOUNT", "DELETE_ACCOUNT", "RESTORE_ACCOUNT", "CREATE_ATHLETE_ACCOUNT", "SYNC_ATHLETE_ACCOUNTS"]).order("created_at", { ascending: false }).limit(8),
     service.from("training_groups").select("id, name, leader_id, location, is_active").eq("is_active", true).order("name"),
+    service.from("athletes").select("id, full_name, status, user_id").not("user_id", "is", null),
   ]);
   if (profileError || authError) return responseError(profileError?.message || authError?.message || "Gagal membaca akun", 500);
 
@@ -88,6 +89,9 @@ export async function GET(request: NextRequest) {
       email_confirmed_at: authUser?.email_confirmed_at || null,
       group_id: groups?.find((g) => g.leader_id === p.id)?.id || null,
       group_name: groups?.find((g) => g.leader_id === p.id)?.name || null,
+      athlete_id: linkedAthletes?.find((a) => a.user_id === p.id)?.id || null,
+      athlete_name: linkedAthletes?.find((a) => a.user_id === p.id)?.full_name || null,
+      athlete_status: linkedAthletes?.find((a) => a.user_id === p.id)?.status || null,
     };
   }).filter((a) => {
     const matchesQ = !q || [a.full_name, a.email, a.phone].some((v) => (v || "").toLowerCase().includes(q));
@@ -111,6 +115,7 @@ export async function GET(request: NextRequest) {
     coach: all.filter((a) => a.role === "coach").length,
     parent: all.filter((a) => a.role === "parent").length,
     ketua: all.filter((a) => a.role === "ketua_kelompok").length,
+    athlete: all.filter((a) => a.role === "athlete").length,
   };
   return NextResponse.json({ accounts, stats, groups: groups || [], recentActivity: recentActivity || [] });
 }
