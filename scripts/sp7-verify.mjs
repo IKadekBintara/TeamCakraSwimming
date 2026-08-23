@@ -21,7 +21,7 @@ const log=(m)=>{out.push(m);console.log(m);};
   const adminU=users.find(u=>u.email==='admin@cakra.local');
   if(!parentU||!adminU) throw new Error('akun uji tidak ditemukan — jalankan seed-dev.mjs');
 
-  const {data:kid}=await svc.from('athletes').select('id').eq('parent_id',(await svc.from('parents').select('id').eq('user_id',parentU.id).single()).data.id).limit(1);
+  const {data:kid}=await svc.from('athletes').select('id').eq('parent_id',(await svc.from('parents').select('id').eq('user_id',parentU.id).single()).data.id).eq('status','ACTIVE').limit(1);
   const kidId=kid?.[0]?.id;
   if(!kidId) throw new Error('parent uji tidak punya atlet');
 
@@ -85,7 +85,7 @@ const log=(m)=>{out.push(m);console.log(m);};
     log('harga race diubah 55000 -> 60000');
 
     // ===== REG-2: registrasi atlet KEDUA milik parent (yang belum terdaftar) =====
-    const {data:kids2}=await svc.from('athletes').select('id').eq('parent_id',(await svc.from('parents').select('id').eq('user_id',parentU.id).single()).data.id).order('full_name');
+    const {data:kids2}=await svc.from('athletes').select('id').eq('parent_id',(await svc.from('parents').select('id').eq('user_id',parentU.id).single()).data.id).eq('status','ACTIVE').order('full_name');
     const otherKid=(kids2??[]).find(k=>k.id!==kidId);
     let reg2=null;
     if(otherKid){
@@ -95,7 +95,7 @@ const log=(m)=>{out.push(m);console.log(m);};
     } else {
       log('REG2 skip: parent hanya punya satu atlet — pakai atlet admin');
       // fallback: atlet mana pun milik admin (staff scope)
-      const {data:anyAthlete}=await svc.from('athletes').select('id').neq('id',kidId).limit(1);
+      const {data:anyAthlete}=await svc.from('athletes').select('id').neq('id',kidId).eq('status','ACTIVE').limit(1);
       if(anyAthlete?.[0]){
         const al=await createClient(url,anon,{auth:{persistSession:false}}).auth.signInWithPassword({email:'admin@cakra.local',password:'Admin123!'});
         const adminC=createClient(url,anon,{auth:{persistSession:false}});
