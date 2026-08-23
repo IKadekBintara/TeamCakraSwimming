@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { STROKES, parseTimeToCs } from "@/lib/performance";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,6 +15,8 @@ function bad(message: string, status = 400) {
 
 export async function POST(req: NextRequest) {
   const requestId = randomUUID();
+  const rlPost = rateLimit(req, "performance-post", 30);
+  if (rlPost) return rlPost;
   try {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -77,7 +80,12 @@ export async function POST(req: NextRequest) {
       .single();
     if (error) {
       console.error(`PERF_DEBUG ${requestId} insert failed`, { code: error.code, message: error.message });
-      return bad(error.code === "42501" ? "Anda tidak berhak mencatat hasil untuk atlet ini" : "Gagal menyimpan hasil", 500);
+      return bad(
+        error.code === "42501"
+          ? "Anda tidak berhak mencatat hasil untuk atlet ini"
+          : "Gagal menyimpan hasil",
+        error.code === "42501" ? 403 : 500
+      );
     }
     return NextResponse.json({ ok: true, id: created?.id }, { headers: { "x-request-id": requestId } });
   } catch (e) {
@@ -89,6 +97,8 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const requestId = randomUUID();
+  const rlPatch = rateLimit(req, "performance-patch", 30);
+  if (rlPatch) return rlPatch;
   try {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -157,6 +167,8 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const requestId = randomUUID();
+  const rlDelete = rateLimit(req, "performance-delete", 30);
+  if (rlDelete) return rlDelete;
   try {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
