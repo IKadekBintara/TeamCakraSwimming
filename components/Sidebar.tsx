@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   LayoutDashboard, Users, UsersRound, CalendarDays, ClipboardCheck,
   BarChart3, FileSpreadsheet, UserCog, Settings, ScrollText, LogOut, CalendarRange, Wallet,
-  ClipboardList, FileBarChart, Bell,
+  ClipboardList, FileBarChart, Bell, Timer,
 } from "lucide-react";
 import ThemeToggle from "@/components/ThemeToggle";
 import type { Role } from "@/types";
@@ -28,6 +28,7 @@ const NAV: NavItem[] = [
   { href: "/jadwal", label: "Jadwal", icon: CalendarDays, roles: ALL },
   { href: "/events", label: "Events", icon: CalendarRange, roles: ALL },
   { href: "/registrations", label: "Pendaftaran", icon: ClipboardList, roles: ["admin", "operator", "coach", "group_leader", "ketua_kelompok"] },
+  { href: "/performance", label: "Performance", icon: Timer, roles: ["admin", "operator", "coach", "group_leader", "ketua_kelompok"] },
   { href: "/event-settings", label: "Event Settings", icon: Settings, roles: ["admin"] },
   { href: "/absensi", label: "Absensi", icon: ClipboardCheck, roles: ["admin", "operator", "coach", "group_leader", "ketua_kelompok"] },
   { href: "/laporan", label: "Laporan", icon: BarChart3, roles: ["admin", "operator", "coach", "group_leader", "ketua_kelompok"] },

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import * as XLSX from "xlsx";
 import { ATTENDANCE_LABELS, DAY_NAMES, STATUS_LABELS } from "@/types";
+import { calculateDolphinKu } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -251,6 +252,48 @@ export async function GET(req: NextRequest) {
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Keuangan");
     filename = "TEAM CAKRA - KEUANGAN DOLPHIN.xlsx";
+  } else if (kind === "performance") {
+    stage = "query.performance";
+    const { data: perf, error: perfError } = await supabase
+      .from("athlete_performance_results")
+      .select("id, athlete_id, recorded_at, stroke, distance, time_cs, pool_length, meet_name, rank, athletes(full_name, cakra, birth_date), events(name)")
+      .order("recorded_at", { ascending: false });
+    if (perfError) {
+      console.error(`EXPORT_DEBUG ${requestId} stage=query.performance`, { error_name: perfError.name, error_message: perfError.message });
+      return NextResponse.json({ error: "Failed to export performance", request_id: requestId }, { status: 500, headers: { "x-request-id": requestId } });
+    }
+    // PB per atlet + kombinasi stroke+distance (semakin kecil = lebih baik)
+    const pbMap = new Map<string, number>();
+    for (const r of perf ?? []) {
+      if (r.time_cs == null) continue;
+      const key = `${r.athlete_id}|${r.stroke}|${r.distance}`;
+      if (!pbMap.has(key) || (pbMap.get(key) as number) > r.time_cs) pbMap.set(key, r.time_cs);
+    }
+    const perfRows = (perf ?? []).map((r) => {
+      const a = Array.isArray(r.athletes) ? r.athletes[0] : r.athletes;
+      const ev = Array.isArray(r.events) ? r.events[0] : r.events;
+      const pb = r.time_cs != null ? pbMap.get(`${r.athlete_id}|${r.stroke}|${r.distance}`) : undefined;
+      const fmt = (cs?: number | null) => {
+        if (cs == null) return "DNF/DQ";
+        const m = Math.floor(cs / 6000); const s = Math.floor((cs % 6000) / 100); const c = cs % 100;
+        return m > 0 ? `${m}:${String(s).padStart(2, "0")}.${String(c).padStart(2, "0")}` : `${s}.${String(c).padStart(2, "0")}`;
+      };
+      return {
+        "Atlet": a?.full_name ?? "",
+        "Cakra": a?.cakra ?? "",
+        "KU": a?.birth_date ? calculateDolphinKu(a.birth_date) : "",
+        "Stroke": r.stroke,
+        "Distance": `${r.distance}m`,
+        "Waktu": fmt(r.time_cs),
+        "PB": pb != null ? fmt(pb) : "",
+        "Tanggal": r.recorded_at,
+        "Kolam": r.pool_length ? `${r.pool_length}m` : "",
+        "Event": ev?.name ?? r.meet_name ?? "",
+        "Rank": r.rank ?? "",
+      };
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(perfRows), "Performance");
+    filename = "TEAM CAKRA - PERFORMANCE ATLET.xlsx";
   } else {
     log("stage=request.validation", { error: "Unknown export kind" });
     return NextResponse.json({ error: "Unknown export kind" }, { status: 400, headers: { "x-request-id": requestId } });
