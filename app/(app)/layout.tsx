@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
+import NotificationBell from "@/components/NotificationBell";
 import type { Role } from "@/types";
 
 export const metadata: Metadata = {
@@ -34,7 +35,10 @@ export default async function AppLayout({
   return (
     <div className="flex min-h-screen">
       <Sidebar role={role} userName={name} />
-      <main className="flex-1 overflow-x-hidden p-4 pb-24 md:p-6 lg:pb-6">
+      <main className="relative flex-1 overflow-x-hidden p-4 pb-24 md:p-6 lg:pb-6">
+        <div className="absolute right-4 top-4 z-40 md:right-6 md:top-6">
+          <NotificationBell />
+        </div>
         {children}
       </main>
     </div>
