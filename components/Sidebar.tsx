@@ -85,6 +85,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/users", label: "Users", icon: UserCog, roles: ADMIN },
       { href: "/accounts", label: "Account Management", icon: UserCog, roles: ADMIN },
+      { href: "/excel-sync", label: "Sinkronisasi Excel", icon: FileSpreadsheet, roles: ADMIN },
       { href: "/settings", label: "Settings", icon: Settings, roles: ADMIN },
       { href: "/audit", label: "Audit Logs", icon: ScrollText, roles: ADMIN },
     ],
