@@ -52,16 +52,16 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col bg-navy-900 dark:bg-navy-950">
+    <main className="relative flex min-h-screen flex-col bg-slate-50 dark:bg-navy-950">
       {/* Cahaya air yang halus — satu aksen, bukan gradient seluruh halaman */}
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-32 left-1/2 h-72 w-[42rem] max-w-[140vw] -translate-x-1/2 rounded-full bg-brand-500/10 blur-3xl" />
-        <div className="absolute -bottom-40 -left-24 h-80 w-80 rounded-full bg-navy-500/10 blur-3xl" />
+        <div className={`absolute -top-32 left-1/2 h-72 w-[42rem] max-w-[140vw] -translate-x-1/2 rounded-full blur-3xl ${"bg-brand-500/10 dark:bg-brand-500/10"}`} />
+        <div className="absolute -bottom-40 -left-24 h-80 w-80 rounded-full bg-navy-500/5 blur-3xl dark:bg-navy-500/10" />
       </div>
 
       {/* TOP — branding */}
       <div className="relative z-10 flex items-center justify-between p-4 sm:p-6">
-        <span className="text-xs font-semibold uppercase tracking-[0.22em] text-white">
+        <span className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-700 dark:text-white">
           Team Cakra Swimming
         </span>
         <ThemeToggle compact />
@@ -79,10 +79,10 @@ export default function LoginPage() {
               className="mx-auto h-28 w-auto sm:h-32"
               priority
             />
-            <h1 className="mt-4 text-2xl font-bold tracking-tight text-white">
+            <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
               TEAM CAKRA SWIMMING
             </h1>
-            <p className="mt-1.5 text-sm text-navy-200">
+            <p className="mt-1.5 text-sm text-slate-500 dark:text-navy-200">
               Sistem Manajemen Atlet, Absensi, Event &amp; Pembayaran
             </p>
           </div>

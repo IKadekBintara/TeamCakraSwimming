@@ -12,7 +12,12 @@ const STATUS_BADGE: Record<string, string> = {
   ARCHIVED: "badge-neutral badge",
 };
 
-export default async function EventsPage() {
+export default async function EventsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ deleted?: string }>;
+}) {
+  const { deleted } = await searchParams;
   const supabase = createClient();
   const [{ data: events }, { data: profile }, { data: regs }] = await Promise.all([
     supabase.from("events").select("id, name, event_date, location, description, contact_person, contact_whatsapp, payment_instructions, fee_per_entry, admin_fee, status, registration_deadline").order("event_date", { ascending: false }),
@@ -25,6 +30,11 @@ export default async function EventsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 pt-14 lg:pt-0">
+      {deleted && (
+        <div className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-medium text-white shadow" role="status">
+          Event berhasil dihapus permanen.
+        </div>
+      )}
       <header className="page-header">
         <div>
           <h1 className="page-title">Events</h1>
