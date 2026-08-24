@@ -70,11 +70,15 @@ for (const cfg of cfgs) {
     const xG = x.gender.trim();
     const expG = dbG === "F" ? "PI" : dbG === "M" ? "PA" : "";
     const dbBirth = a?.birth_date ? String(a.birth_date).slice(0, 10).split("-").reverse().join("/") : "";
+    // Serial-date Excel (mis. 40909 = 01/01/2012) → konversi sebelum banding.
+    const xBirthNorm = /^\d{1,5}$/.test(x.birth.trim())
+      ? (() => { const d = new Date(Date.UTC(1899, 11, 30) + Number(x.birth.trim()) * 86400000); return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`; })()
+      : x.birth.trim();
     const norm = s => s.replace(/\D/g, "");
     const diffs = [];
     if (xKu !== dbKu) diffs.push(`KU:${xKu}|${dbKu}`);
     if (xG !== expG) diffs.push(`G:${xG}|${expG}`);
-    if (norm(x.birth) !== norm(dbBirth)) diffs.push(`BIRTH:${x.birth}|${dbBirth}`);
+    if (norm(xBirthNorm) !== norm(dbBirth)) diffs.push(`BIRTH:${x.birth}|${dbBirth}`);
     if (diffs.length) { mismatch++; issues.push(`MISMATCH row${x.row} ${dbName} → ${diffs.join(", ")}`); }
     else matched++;
   }

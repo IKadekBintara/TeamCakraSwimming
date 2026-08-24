@@ -369,7 +369,8 @@ async function reconcile(cfg) {
   for (const r of regs ?? []) {
     try {
       const state = await fetchCurrentState(r.id);
-      const res = await upsertRegistration(cfg, state, true);
+      // Tulis NYATA (bukan dryRun) — reconcile adalah mekanisme backfill.
+      const res = await upsertRegistration(cfg, state);
       if (res.outcome === "INSERTED" || res.outcome === "UPDATED") summary.inserted++;
       else if (res.outcome === "REVIEW_REQUIRED") summary.review++;
       else summary.skipped_existing++;
