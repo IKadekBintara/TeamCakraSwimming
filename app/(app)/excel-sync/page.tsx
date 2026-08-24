@@ -19,6 +19,7 @@ interface Config {
   mapping: Record<string, string>;
   duplicate_strategy: string;
   enabled: boolean;
+  last_sync_at?: string | null;
   last_check?: { ok: boolean; checks: Record<string, unknown>; error: string | null } | null;
   last_check_at?: string | null;
   last_dry_run?: { db_registrations: number; insert: number; update: number; skip: number; review_required: number; mismatch?: string[]; notes?: string[] } | null;
@@ -139,7 +140,7 @@ export default function ExcelSyncPage() {
 
       {!settings.enabled && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200" role="status">
-          <strong>Otomatisasi Excel sedang dimatikan (Global OFF).</strong> Database, pendaftaran, dan pembayaran tetap berjalan normal; konfigurasi & file Excel tidak dihapus. Saat diaktifkan kembali, gunakan Sync Now / Reconcile untuk mengejar perubahan yang tertunda.
+          <strong>Sinkronisasi Excel sedang dinonaktifkan.</strong> Database, pendaftaran, dan pembayaran tetap berjalan normal; konfigurasi & file Excel tidak dihapus. Saat diaktifkan kembali, gunakan Sync Now / Reconcile untuk mengejar perubahan yang tertunda.
         </div>
       )}
 
@@ -202,6 +203,11 @@ export default function ExcelSyncPage() {
                         <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${c.enabled && settings.enabled ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200" : "bg-slate-200 text-slate-600 dark:bg-navy-700 dark:text-slate-300"}`}>
                           {c.enabled ? (settings.enabled ? "ENABLED" : "ENABLED (GLOBAL OFF)") : "DISABLED"}
                         </span>
+                        {c.last_sync_at && (
+                          <div className="mt-0.5 text-[10px] text-slate-400">
+                            Sync: {new Date(c.last_sync_at).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                          </div>
+                        )}
                       </td>
                       <td className="px-2 py-2 tabular-nums">
                         {(s.PENDING ?? 0) + (s.RETRYING ?? 0)} / <span className={(s.FAILED ?? 0) > 0 ? "font-bold text-red-600" : ""}>{s.FAILED ?? 0}</span>

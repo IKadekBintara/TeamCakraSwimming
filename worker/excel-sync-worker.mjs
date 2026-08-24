@@ -332,6 +332,9 @@ async function runJob(job) {
 
     const status = result.outcome === "REVIEW_REQUIRED" ? "REVIEW_REQUIRED" : "SUCCESS";
     await finish(job, status, null, result.note ?? result.outcome);
+    if (status === "SUCCESS" && effCfg.id) {
+      await db.from("excel_sync_configurations").update({ last_sync_at: new Date().toISOString() }).eq("id", effCfg.id);
+    }
     await syncLog(logAction, {
       configuration_id: effCfg.id, event_id: effCfg.event_id, registration_id: job.registration_id, athlete_id: job.athlete_id,
       detail: { outcome: result.outcome, row: result.row ?? null, summary: result.summary ?? null },
