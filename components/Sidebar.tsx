@@ -27,10 +27,12 @@ interface GroupProps {
   touch?: boolean;
   /** Unik per instansi render (sidebar vs drawer) agar ID panel tidak duplikat. */
   variant: "desktop" | "mobile";
+  /** false saat drawer tertutup → link keluar dari tab order (pengganti inert di React 18). */
+  focusable?: boolean;
 }
 
 /** Satu renderer untuk sidebar desktop DAN drawer mobile — parity terjamin. */
-function NavGroupBlock({ group, pathname, open, onToggle, onNavigate, touch = false, variant }: GroupProps) {
+function NavGroupBlock({ group, pathname, open, onToggle, onNavigate, touch = false, variant, focusable = true }: GroupProps) {
   const containsActive = group.items.some((i) => isActive(pathname, i.href));
   const rowPad = touch ? "py-2.5" : "py-2";
 
@@ -43,6 +45,7 @@ function NavGroupBlock({ group, pathname, open, onToggle, onNavigate, touch = fa
           href={item.href}
           onClick={onNavigate}
           aria-current={isActive(pathname, item.href) ? "page" : undefined}
+          tabIndex={focusable ? undefined : -1}
           className={`flex items-center gap-3 rounded-lg px-3 ${rowPad} text-sm font-medium transition-colors ${
             isActive(pathname, item.href)
               ? "bg-brand-600 text-white shadow"
@@ -63,6 +66,7 @@ function NavGroupBlock({ group, pathname, open, onToggle, onNavigate, touch = fa
         onClick={onToggle}
         aria-expanded={open}
         aria-controls={`nav-group-${group.id}-${variant}`}
+        tabIndex={focusable ? undefined : -1}
         className={`flex w-full items-center justify-between rounded-lg px-3 ${rowPad} text-[10px] font-semibold uppercase tracking-[0.14em] transition-colors ${
           containsActive && !open ? "bg-brand-50 text-brand-800 dark:bg-slate-100/5" : "text-slate-400 hover:bg-brand-50 hover:text-brand-800 dark:hover:bg-slate-100/5"
         }`}
@@ -83,7 +87,7 @@ function NavGroupBlock({ group, pathname, open, onToggle, onNavigate, touch = fa
               href={i.href}
               onClick={onNavigate}
               aria-current={isActive(pathname, i.href) ? "page" : undefined}
-              tabIndex={open ? undefined : -1}
+              tabIndex={open && focusable ? undefined : -1}
               className={`flex items-center gap-3 rounded-lg px-3 ${rowPad} text-sm font-medium transition-colors ${
                 isActive(pathname, i.href)
                   ? "bg-brand-600 text-white shadow"
@@ -106,7 +110,7 @@ export default function Sidebar({ role, userName }: { role: Role; userName: stri
   const supabase = createClient();
 
   const sections = filterNavGroups(role);
-  const shortcuts = mobileShortcuts(role, 4);
+  const shortcuts = mobileShortcuts(role, 5);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Accordion: grup aktif terbuka sejak render pertama — refresh tetap benar.
@@ -229,7 +233,7 @@ export default function Sidebar({ role, userName }: { role: Role; userName: stri
           tabIndex={drawerOpen ? 0 : -1}
           aria-label="Tutup menu navigasi"
           onClick={() => setDrawerOpen(false)}
-          className={`absolute inset-0 h-full w-full bg-black/50 transition-opacity duration-200 ${drawerOpen ? "opacity-100" : "opacity-0"}`}
+          className={`absolute inset-0 h-full w-full bg-black/50 transition-opacity duration-200 motion-reduce:transition-none ${drawerOpen ? "opacity-100" : "opacity-0"}`}
         />
         {/* Panel slide-over kanan; lebar nyaman untuk jempol, menyisakan backdrop */}
         <div
@@ -238,7 +242,7 @@ export default function Sidebar({ role, userName }: { role: Role; userName: stri
           aria-label="Menu navigasi lengkap"
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
-          className={`absolute inset-y-0 right-0 flex w-[85%] max-w-xs flex-col bg-white shadow-xl transition-transform duration-200 ease-out ${drawerOpen ? "translate-x-0" : "translate-x-full"}`}
+          className={`absolute inset-y-0 right-0 flex w-[85%] max-w-xs flex-col bg-white shadow-xl transition-transform duration-200 ease-out motion-reduce:transition-none ${drawerOpen ? "translate-x-0" : "translate-x-full"}`}
         >
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
             <p className="text-sm font-bold text-brand-900">Menu</p>
@@ -263,6 +267,7 @@ export default function Sidebar({ role, userName }: { role: Role; userName: stri
                   onToggle={() => toggleGroup(g.id)}
                   onNavigate={() => setDrawerOpen(false)}
                   touch
+                  focusable={drawerOpen}
                   variant="mobile"
                 />
               </div>
