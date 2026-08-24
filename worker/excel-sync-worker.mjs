@@ -17,6 +17,7 @@
 import { createClient } from "@supabase/supabase-js";
 import ExcelJS from "exceljs";
 import { readFileSync } from "node:fs";
+import { statFile, rmFile } from "./fs-utils.mjs";
 import path from "node:path";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -272,6 +273,8 @@ async function runJob(job) {
   // saat config masih aktif, jadi job harus tuntas meski config kini
   // hilang (CASCADE) atau global dimatikan setelahnya.
   const isEventCleanup = job.action === "delete_registration" && job.payload?.reason === "EVENT_PERMANENT_DELETED";
+  // Diagnostik tetap boleh jalan walau sync OFF — justru untuk memeriksa kesiapan.
+  const isDiagnostic = job.action === "test_connection" || job.action === "dry_run";
 
   let effCfg = cfg;
   if (!effCfg && isEventCleanup && snap?.file_path) {
@@ -283,7 +286,7 @@ async function runJob(job) {
     };
   }
   if (!effCfg) return finish(job, "SKIPPED_DISABLED", null, "konfigurasi hilang");
-  if (!isEventCleanup && (!effCfg.enabled || !(await globalEnabled()))) {
+  if (!isEventCleanup && !isDiagnostic && (!effCfg.enabled || !(await globalEnabled()))) {
     await syncLog("SYNC_SKIPPED_DISABLED", { configuration_id: effCfg.id, event_id: effCfg.event_id, detail: { job_id: job.id } });
     return finish(job, "SKIPPED_DISABLED", null, "sync disabled");
   }
@@ -292,6 +295,28 @@ async function runJob(job) {
 
   try {
     let result;
+    if (job.action === "test_connection") {
+      const check = await testConnection(effCfg);
+      await db.from("excel_sync_configurations").update({
+        last_check: check, last_check_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      }).eq("id", effCfg.id);
+      await syncLog(check.ok ? "TEST_CONNECTION_OK" : "TEST_CONNECTION_FAILED", {
+        configuration_id: effCfg.id, event_id: effCfg.event_id,
+        detail: { job_id: job.id, checks: check.checks }, error_message: check.error,
+      });
+      return finish(job, check.ok ? "SUCCESS" : "FAILED", check.error, check.ok ? "connection ok" : "connection failed");
+    }
+    if (job.action === "dry_run") {
+      const dry = await dryRunConfig(effCfg);
+      await db.from("excel_sync_configurations").update({
+        last_dry_run: dry.summary, last_dry_run_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      }).eq("id", effCfg.id);
+      await syncLog(dry.ok ? "DRY_RUN_OK" : "DRY_RUN_REVIEW", {
+        configuration_id: effCfg.id, event_id: effCfg.event_id,
+        detail: { job_id: job.id, summary: dry.summary }, error_message: null,
+      });
+      return finish(job, "SUCCESS", null, `insert=${dry.summary.insert} update=${dry.summary.update} skip=${dry.summary.skip} review=${dry.summary.review_required}`);
+    }
     if (job.action === "delete_registration") {
       result = await deleteRegistration(effCfg, job.registration_id, false, snap);
     } else if (job.action === "reconcile") {
@@ -341,7 +366,7 @@ async function reconcile(cfg) {
   for (const r of regs ?? []) {
     try {
       const state = await fetchCurrentState(r.id);
-      const res = await upsertRegistration(cfg, state);
+      const res = await upsertRegistration(cfg, state, true);
       if (res.outcome === "INSERTED" || res.outcome === "UPDATED") summary.inserted++;
       else if (res.outcome === "REVIEW_REQUIRED") summary.review++;
       else summary.skipped_existing++;
@@ -351,6 +376,64 @@ async function reconcile(cfg) {
     }
   }
   return { outcome: summary.review > 0 ? "REVIEW_REQUIRED" : "OK", summary };
+}
+
+/** TEST CONNECTION: file ada? worksheet ada? area valid? writable?
+ *  Tidak pernah mengubah file. */
+async function testConnection(cfg) {
+  const result = { ok: false, checks: {}, error: null };
+  try {
+    const st = await statFile(cfg.file_path);
+    result.checks.file_exists = true;
+    result.checks.size_bytes = st.size;
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(cfg.file_path);
+    result.checks.readable = true;
+    const ws = wb.getWorksheet(cfg.worksheet_name);
+    if (!ws) throw Object.assign(new Error(`Worksheet \"${cfg.worksheet_name}\" tidak ditemukan`), { code: "WORKSHEET_MISSING" });
+    result.checks.worksheet = true;
+    result.checks.header_row = cfg.header_row;
+    const hdr = ws.getCell(cfg.header_row, 1).value;
+    result.checks.header_sample = typeof hdr === "object" && hdr?.richText ? hdr.richText.map((r) => r.text).join("") : String(hdr ?? "");
+    // Writable test di file SEMENTARA — file asli tidak disentuh.
+    const tmp = `${cfg.file_path}.writetest-${Date.now()}.tmp`;
+    try {
+      await new ExcelJS.Workbook().xlsx.writeFile(tmp);
+      result.checks.writable_dir = true;
+    } finally {
+      await rmFile(tmp);
+    }
+    result.ok = true;
+  } catch (e) {
+    result.error = e.message;
+    if (/ENOENT|EPERM|EACCES/.test(String(e.message))) result.checks.file_exists = false;
+    if (e.code === "WORKSHEET_MISSING") result.checks.worksheet = false;
+  }
+  return result;
+}
+
+/** DRY RUN: hitung INSERT/UPDATE/SKIP/REVIEW tanpa menulis apa pun. */
+async function dryRunConfig(cfg) {
+  const { data: regs } = await db.from("event_registrations")
+    .select("id").eq("event_id", cfg.event_id).neq("status", "CANCELLED");
+  const summary = { db_registrations: regs?.length ?? 0, insert: 0, update: 0, skip: 0, review_required: 0, mismatch: [], notes: [] };
+  for (const r of regs ?? []) {
+    try {
+      const state = await fetchCurrentState(r.id);
+      const res = state ? await upsertRegistration(cfg, state, true) : { outcome: "SKIP", note: "reg hilang" };
+      if (res.outcome === "INSERTED") summary.insert++;
+      else if (res.outcome === "UPDATED") summary.update++;
+      else if (res.outcome === "REVIEW_REQUIRED") {
+        summary.review_required++;
+        summary.mismatch.push(res.note);
+        if (summary.mismatch.length >= 5) summary.mismatch.push("…");
+      } else summary.skip++;
+    } catch (e) {
+      summary.notes.push(`${e.message}`);
+      if (summary.notes.length >= 3) break;
+    }
+  }
+  return { ok: summary.notes.length === 0, summary };
 }
 
 // ---------- main loop ----------

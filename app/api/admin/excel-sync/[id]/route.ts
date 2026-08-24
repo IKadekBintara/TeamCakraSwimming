@@ -13,8 +13,24 @@ async function admin() {
   return { user, service: createServiceClient(), userId: user.id };
 }
 
-function fail(message: string, status = 400) {
-  return NextResponse.json({ error: message }, { status });
+function fail(message: string, status?: number | string, requestId?: string) {
+  if (typeof status === "string") {
+    requestId = status;
+    status = 400;
+  }
+  const st = (status as number) ?? 400;
+  if (requestId) {
+    console.error(`[excel-sync][${requestId}] ${st}: ${message}`);
+    return NextResponse.json({ error: message, request_id: requestId }, { status: st });
+  }
+  return NextResponse.json({ error: message }, { status: st });
+}
+
+/** Request id untuk korelasi log server ↔ response UI. */
+function newRequestId(stage: string) {
+  const rid = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  console.log(`[excel-sync][${rid}] start ${stage}`);
+  return rid;
 }
 
 /**
@@ -22,27 +38,28 @@ function fail(message: string, status = 400) {
  *  { action: "toggle_config" | "update_config" | "delete_config" | "sync_now", ... }
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const rid = newRequestId("mutation");
   const ctx = await admin();
-  if ("error" in ctx) return fail(ctx.error === 401 ? "Sesi login diperlukan" : "Admin only", ctx.error);
+  if ("error" in ctx) return fail(ctx.error === 401 ? "Sesi login diperlukan" : "Admin only", ctx.error, rid);
   const db = ctx.service;
   const b = await req.json().catch(() => null);
-  if (!b?.action) return fail("action wajib");
+  if (!b?.action) return fail("action wajib", rid);
 
   if (b.action === "set_global") {
-    return fail("set_global gunakan PATCH /api/admin/excel-sync (tanpa id)");
+    return fail("set_global gunakan PATCH /api/admin/excel-sync (tanpa id)", rid);
   }
 
   const { id } = await params;
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return fail("id tidak valid");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return fail("id tidak valid", rid);
   const { data: cfg } = await db.from("excel_sync_configurations").select("*").eq("id", id).maybeSingle();
-  if (!cfg) return fail("Konfigurasi tidak ditemukan", 404);
+  if (!cfg) return fail("Konfigurasi tidak ditemukan", 404, rid);
 
   switch (b.action) {
     case "toggle_config": {
       const enabled = Boolean(b.enabled);
       const { error } = await db.from("excel_sync_configurations")
         .update({ enabled, updated_at: new Date().toISOString() }).eq("id", id);
-      if (error) return fail(error.message, 500);
+      if (error) return fail(error.message, 500, rid);
       await db.from("excel_sync_logs").insert({
         action: enabled ? "SYNC_ENABLED" : "SYNC_DISABLED",
         configuration_id: id, event_id: cfg.event_id, actor_id: ctx.userId,
@@ -62,7 +79,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (b.mapping !== undefined) patch.mapping = b.mapping;
       if (b.duplicate_strategy !== undefined) patch.duplicate_strategy = b.duplicate_strategy === "update_empty_fields" ? "update_empty_fields" : "skip";
       const { data: updated, error } = await db.from("excel_sync_configurations").update(patch).eq("id", id).select().single();
-      if (error) return fail(error.message, 500);
+      if (error) return fail(error.message, 500, rid);
       await db.from("excel_sync_logs").insert({
         action: "CONFIG_UPDATED", configuration_id: id, event_id: cfg.event_id, actor_id: ctx.userId,
         detail: { fields: Object.keys(patch).filter((k) => k !== "updated_at") },
@@ -73,7 +90,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     case "delete_config": {
       // HANYA configuration — event, registration, payment, dan file Excel tidak disentuh.
       const { error } = await db.from("excel_sync_configurations").delete().eq("id", id);
-      if (error) return fail(error.message, 500);
+      if (error) return fail(error.message, 500, rid);
       await db.from("excel_sync_logs").insert({
         action: "CONFIG_DELETED", event_id: cfg.event_id, actor_id: ctx.userId,
         detail: { name: cfg.name, file_path: cfg.file_path },
@@ -83,17 +100,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     case "sync_now": {
       if (!cfg.enabled) {
-        return fail("Konfigurasi sedang DISABLED — aktifkan dulu atau gunakan Enable & Sync", 409);
+        return fail("Konfigurasi sedang DISABLED — aktifkan dulu atau gunakan Enable & Sync", 409, rid);
       }
       const global = await db.from("excel_sync_settings").select("enabled").eq("id", "global").maybeSingle();
-      if (!global.data?.enabled) return fail("Excel Sync sedang OFF secara global", 409);
+      if (!global.data?.enabled) return fail("Excel Sync sedang OFF secara global", 409, rid);
 
       // Enqueue job reconcile penuh untuk config ini (worker fetch current state & isi yang kurang).
       const { error } = await db.from("excel_sync_jobs").insert({
         configuration_id: id, action: "reconcile",
         payload: { trigger: "manual_sync_now", requested_by: ctx.userId },
       });
-      if (error) return fail(error.message, 500);
+      if (error) return fail(error.message, 500, rid);
       await db.from("excel_sync_logs").insert({
         action: "SYNC_STARTED", configuration_id: id, event_id: cfg.event_id, actor_id: ctx.userId,
         detail: { trigger: "sync_now" },
@@ -102,6 +119,33 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     default:
-      return fail("action tidak dikenal");
+      return fail("action tidak dikenal", rid);
   }
+}
+
+/** POST: aksi diagnostik — enqueue job test_connection / dry_run.
+ *  Sengaja TIDAK memerlukan sync enabled: diagnostik justru untuk memeriksa kesiapan. */
+export async function POST(req: NextRequest, ctx2: { params: { id: string } }) {
+  const rid = newRequestId("mutation");
+  const ctx = await admin();
+  if ("error" in ctx) return fail(ctx.error === 401 ? "Sesi login diperlukan" : "Admin only", ctx.error, rid);
+  const { id } = ctx2.params;
+  const b = await req.json().catch(() => null);
+  if (!b || !["test_connection", "dry_run"].includes(b.action)) return fail("action harus test_connection | dry_run", 400, rid);
+  const db = ctx.service;
+
+  const { data: cfg } = await db.from("excel_sync_configurations").select("id, event_id").eq("id", id).maybeSingle();
+  if (!cfg) return fail("Konfigurasi tidak ditemukan", 404, rid);
+
+  const { error } = await db.from("excel_sync_jobs").insert({
+    configuration_id: id, action: b.action,
+    payload: { trigger: "manual_diagnostic", requested_by: ctx.userId },
+  });
+  if (error) return fail(error.message, 500, rid);
+  await db.from("excel_sync_logs").insert({
+    action: b.action === "test_connection" ? "TEST_CONNECTION_QUEUED" : "DRY_RUN_QUEUED",
+    configuration_id: id, event_id: cfg.event_id, actor_id: ctx.userId,
+    detail: { trigger: "manual_diagnostic" },
+  });
+  return NextResponse.json({ ok: true, queued: b.action });
 }

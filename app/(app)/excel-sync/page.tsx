@@ -19,6 +19,10 @@ interface Config {
   mapping: Record<string, string>;
   duplicate_strategy: string;
   enabled: boolean;
+  last_check?: { ok: boolean; checks: Record<string, unknown>; error: string | null } | null;
+  last_check_at?: string | null;
+  last_dry_run?: { db_registrations: number; insert: number; update: number; skip: number; review_required: number; mismatch?: string[]; notes?: string[] } | null;
+  last_dry_run_at?: string | null;
   events?: { name?: string; event_date?: string; status?: string } | null;
 }
 
@@ -37,6 +41,7 @@ export default function ExcelSyncPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmGlobalOff, setConfirmGlobalOff] = useState(false);
 
+
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/excel-sync");
@@ -51,6 +56,37 @@ export default function ExcelSyncPage() {
       setToast({ msg: e instanceof Error ? e.message : "Gagal memuat", err: true });
     }
   }, []);
+
+
+  /** POST aksi diagnostik (test_connection / dry_run) lalu poll hasilnya. */
+  const runDiagnostic = useCallback(async (id: string, action: "test_connection" | "dry_run") => {
+    setBusyId(id);
+    try {
+      const res = await fetch(`/api/admin/excel-sync/${id}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal");
+      for (let i = 0; i < 20; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const r2 = await fetch("/api/admin/excel-sync");
+        const j2 = await r2.json();
+        if (!r2.ok) continue;
+        const cfg = (j2.configurations ?? []).find((c: Config) => c.id === id);
+        const stamp = action === "test_connection" ? cfg?.last_check_at : cfg?.last_dry_run_at;
+        if (stamp && Date.now() - new Date(stamp).getTime() < 120000) {
+          setToast({ msg: action === "test_connection" ? "Test Connection selesai." : "Dry Run selesai." });
+          break;
+        }
+      }
+      await load();
+    } catch (e) {
+      setToast({ msg: e instanceof Error ? e.message : "Gagal", err: true });
+    } finally {
+      setBusyId(null);
+    }
+  }, [load]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -100,6 +136,12 @@ export default function ExcelSyncPage() {
           + Tambah Konfigurasi
         </button>
       </header>
+
+      {!settings.enabled && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200" role="status">
+          <strong>Otomatisasi Excel sedang dimatikan (Global OFF).</strong> Database, pendaftaran, dan pembayaran tetap berjalan normal; konfigurasi & file Excel tidak dihapus. Saat diaktifkan kembali, gunakan Sync Now / Reconcile untuk mengejar perubahan yang tertunda.
+        </div>
+      )}
 
       {/* Status global & worker */}
       <section className="card grid gap-4 sm:grid-cols-2">
@@ -170,6 +212,20 @@ export default function ExcelSyncPage() {
                           <button
                             type="button" className="btn-secondary px-2 py-1 text-xs"
                             disabled={busyId === c.id}
+                            onClick={() => runDiagnostic(c.id, "test_connection")}
+                          >
+                            Test Connection
+                          </button>
+                          <button
+                            type="button" className="btn-secondary px-2 py-1 text-xs"
+                            disabled={busyId === c.id}
+                            onClick={() => runDiagnostic(c.id, "dry_run")}
+                          >
+                            Dry Run
+                          </button>
+                          <button
+                            type="button" className="btn-secondary px-2 py-1 text-xs"
+                            disabled={busyId === c.id}
                             onClick={() => patchConfig(c.id, { action: "toggle_config", enabled: !c.enabled }, c.enabled ? `${c.name} dimatikan.` : `${c.name} diaktifkan.`)}
                           >
                             {c.enabled ? "Disable" : "Enable"}
@@ -199,6 +255,52 @@ export default function ExcelSyncPage() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+        {configs.some((c) => c.last_check_at || c.last_dry_run_at) && (
+          <div className="mt-3 space-y-2">
+            {configs.filter((c) => c.last_check_at || c.last_dry_run_at).map((c) => (
+              <details key={c.id} className="rounded-lg border border-slate-200 px-3 py-2 text-xs dark:border-navy-700">
+                <summary className="cursor-pointer font-medium">
+                  Hasil diagnostik — {c.name}
+                  {c.last_check && (
+                    <span className={`ml-2 rounded px-1.5 py-0.5 ${c.last_check.ok ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200" : "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-200"}`}>
+                      Test: {c.last_check.ok ? "OK" : "GAGAL"}
+                    </span>
+                  )}
+                  {c.last_dry_run && (
+                    <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 dark:bg-navy-700">
+                      Dry Run: +{c.last_dry_run.insert} / ~{c.last_dry_run.update} / ={c.last_dry_run.skip} / !{c.last_dry_run.review_required}
+                    </span>
+                  )}
+                </summary>
+                {c.last_check && (
+                  <div className="mt-2 space-y-1">
+                    <p className="font-semibold">Test Connection ({c.last_check_at ? new Date(c.last_check_at).toLocaleString("id-ID") : "-"})</p>
+                    <ul className="list-disc pl-5">
+                      <li>File ada: {String(c.last_check.checks?.file_exists ?? false)} · Worksheet: {String(c.last_check.checks?.worksheet ?? false)} · Writable: {String(c.last_check.checks?.writable_dir ?? false)}</li>
+                      <li>Ukuran: {Number(c.last_check.checks?.size_bytes ?? 0).toLocaleString("id-ID")} byte</li>
+                      {c.last_check.error && <li className="text-red-600 dark:text-red-400">Error: {c.last_check.error}</li>}
+                    </ul>
+                  </div>
+                )}
+                {c.last_dry_run && (
+                  <div className="mt-2 space-y-1">
+                    <p className="font-semibold">Dry Run ({c.last_dry_run_at ? new Date(c.last_dry_run_at).toLocaleString("id-ID") : "-"}) — DB: {c.last_dry_run.db_registrations} registrasi</p>
+                    {(c.last_dry_run.mismatch?.length ?? 0) > 0 && (
+                      <ul className="list-disc pl-5 text-amber-700 dark:text-amber-300">
+                        {c.last_dry_run.mismatch!.map((m, i) => <li key={i}>{m}</li>)}
+                      </ul>
+                    )}
+                    {(c.last_dry_run.notes?.length ?? 0) > 0 && (
+                      <ul className="list-disc pl-5 text-red-600 dark:text-red-400">
+                        {c.last_dry_run.notes!.map((n, i) => <li key={i}>{n}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </details>
+            ))}
           </div>
         )}
       </section>

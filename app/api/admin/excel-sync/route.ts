@@ -14,8 +14,24 @@ async function admin() {
   return { user, service: createServiceClient() };
 }
 
-function fail(message: string, status = 400) {
-  return NextResponse.json({ error: message }, { status });
+function fail(message: string, status?: number | string, requestId?: string) {
+  if (typeof status === "string") {
+    requestId = status;
+    status = 400;
+  }
+  const st = (status as number) ?? 400;
+  if (requestId) {
+    console.error(`[excel-sync][${requestId}] ${st}: ${message}`);
+    return NextResponse.json({ error: message, request_id: requestId }, { status: st });
+  }
+  return NextResponse.json({ error: message }, { status: st });
+}
+
+/** Request id untuk korelasi log server ↔ response UI. */
+function newRequestId(stage: string) {
+  const rid = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  console.log(`[excel-sync][${rid}] start ${stage}`);
+  return rid;
 }
 
 /** GET: settings global + daftar konfigurasi + statistik job + worker status. */
@@ -55,17 +71,18 @@ export async function GET() {
 
 /** PATCH collection: hanya aksi global (tanpa id). Aksi per-config ada di /[id]. */
 export async function PATCH(req: NextRequest) {
+  const rid = newRequestId("mutation");
   const ctx = await admin();
-  if ("error" in ctx) return fail(ctx.error === 401 ? "Sesi login diperlukan" : "Admin only", ctx.error);
+  if ("error" in ctx) return fail(ctx.error === 401 ? "Sesi login diperlukan" : "Admin only", ctx.error, rid);
   const b = await req.json().catch(() => null);
-  if (!b?.action) return fail("action wajib");
-  if (b.action !== "set_global") return fail("Aksi per-konfigurasi gunakan PATCH /api/admin/excel-sync/{id}");
+  if (!b?.action) return fail("action wajib", rid);
+  if (b.action !== "set_global") return fail("Aksi per-konfigurasi gunakan PATCH /api/admin/excel-sync/{id}", rid);
 
   const enabled = Boolean(b.enabled);
   const { error } = await ctx.service.from("excel_sync_settings")
     .update({ enabled, updated_by: ctx.user.id, updated_at: new Date().toISOString() })
     .eq("id", "global");
-  if (error) return fail(error.message, 500);
+  if (error) return fail(error.message, 500, rid);
   await ctx.service.from("excel_sync_logs").insert({
     action: enabled ? "GLOBAL_ENABLED" : "GLOBAL_DISABLED", actor_id: ctx.user.id,
     detail: { enabled },
@@ -75,29 +92,30 @@ export async function PATCH(req: NextRequest) {
 
 /** POST: buat konfigurasi baru. */
 export async function POST(req: NextRequest) {
+  const rid = newRequestId("mutation");
   const ctx = await admin();
-  if ("error" in ctx) return fail(ctx.error === 401 ? "Sesi login diperlukan" : "Admin only", ctx.error);
+  if ("error" in ctx) return fail(ctx.error === 401 ? "Sesi login diperlukan" : "Admin only", ctx.error, rid);
   const b = await req.json().catch(() => null);
-  if (!b) return fail("Body tidak valid");
+  if (!b) return fail("Body tidak valid", rid);
 
   const name = String(b.name ?? "").trim();
   const event_id = String(b.event_id ?? "");
   const file_path = String(b.file_path ?? "").trim();
   const worksheet_name = String(b.worksheet_name ?? "").trim();
-  if (!name) return fail("Nama konfigurasi wajib diisi");
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(event_id)) return fail("Event tidak valid");
-  if (!file_path) return fail("File Excel wajib diisi");
-  if (!worksheet_name) return fail("Worksheet wajib diisi");
+  if (!name) return fail("Nama konfigurasi wajib diisi", rid);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(event_id)) return fail("Event tidak valid", rid);
+  if (!file_path) return fail("File Excel wajib diisi", rid);
+  if (!worksheet_name) return fail("Worksheet wajib diisi", rid);
 
   const { data: ev } = await ctx.service.from("events").select("id").eq("id", event_id).maybeSingle();
-  if (!ev) return fail("Event tidak ditemukan", 404);
+  if (!ev) return fail("Event tidak ditemukan", 404, rid);
 
   const { data: dup } = await ctx.service
     .from("excel_sync_configurations")
     .select("id")
     .eq("event_id", event_id).eq("file_path", file_path).eq("worksheet_name", worksheet_name)
     .maybeSingle();
-  if (dup) return fail("Konfigurasi untuk event+file+worksheet ini sudah ada", 409);
+  if (dup) return fail("Konfigurasi untuk event+file+worksheet ini sudah ada", 409, rid);
 
   const { data: cfg, error } = await ctx.service
     .from("excel_sync_configurations")
@@ -113,7 +131,7 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single();
-  if (error) return fail(error.message, 500);
+  if (error) return fail(error.message, 500, rid);
 
   await ctx.service.from("excel_sync_logs").insert({
     action: "CONFIG_CREATED", configuration_id: cfg.id, event_id, actor_id: ctx.user.id,
