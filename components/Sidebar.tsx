@@ -3,18 +3,55 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   LogOut, ChevronDown, Menu as MenuIcon, X,
 } from "lucide-react";
 import ThemeToggle from "@/components/ThemeToggle";
-import { filterNavGroups, isActive, mobileShortcuts, type NavGroup } from "@/components/navigation";
+import { filterNavGroups, isActive, mobileShortcuts, type NavGroup, type NavItem } from "@/components/navigation";
 import type { Role } from "@/types";
 
 /** Grup yang memuat route aktif — untuk auto-expand accordion. */
 function activeGroupId(groups: NavGroup[], pathname: string): string | null {
   return groups.find((g) => g.items.some((i) => isActive(pathname, i.href)))?.id ?? null;
+}
+
+interface RowProps {
+  item: NavItem;
+  pathname: string;
+  onNavigate?: () => void;
+  /** false di drawer mobile → target sentuh lebih tinggi (≥44px). */
+  touch?: boolean;
+  /** Indentasi submenu di dalam accordion. */
+  indented?: boolean;
+  /** Primary navigation (Dashboard): geometri sama, bobot lebih tebal. */
+  prominent?: boolean;
+  tabbable?: boolean;
+}
+
+/** Baris menu daun — dipakai submenu accordion DAN fitur standalone (Dashboard,
+ *  Performance, dst.) sehingga tinggi/padding/radius/hover/active identik. */
+function NavLinkRow({ item, pathname, onNavigate, touch = false, indented = false, prominent = false, tabbable = true }: RowProps) {
+  const active = isActive(pathname, item.href);
+  return (
+    <Link
+      href={item.href}
+      onClick={onNavigate}
+      aria-current={active ? "page" : undefined}
+      tabIndex={tabbable ? undefined : -1}
+      className={`flex items-center gap-3 rounded-lg ${indented ? "pl-9" : "px-3"} pr-3 ${touch ? "py-2.5" : "py-2"} text-sm transition-colors ${
+        active
+          ? "bg-brand-600 font-medium text-white shadow-sm"
+          : prominent
+            ? "font-semibold text-brand-900 hover:bg-brand-50 dark:text-slate-100 dark:hover:bg-slate-100/5"
+            : "font-medium text-slate-600 hover:bg-brand-50 hover:text-brand-800 dark:text-slate-300 dark:hover:bg-slate-100/5"
+      }`}
+    >
+      <item.icon className={`h-4 w-4 shrink-0 ${active ? "" : prominent ? "text-brand-600 dark:text-brand-400" : ""}`} />
+      {item.label}
+    </Link>
+  );
 }
 
 interface GroupProps {
@@ -23,38 +60,33 @@ interface GroupProps {
   open: boolean;
   onToggle: () => void;
   onNavigate?: () => void;
-  /** false di drawer mobile → target sentuh lebih tinggi (≥44px). */
   touch?: boolean;
   /** Unik per instansi render (sidebar vs drawer) agar ID panel tidak duplikat. */
   variant: "desktop" | "mobile";
   /** false saat drawer tertutup → link keluar dari tab order (pengganti inert di React 18). */
   focusable?: boolean;
+  /** Treatment primary navigation (hanya Dashboard). */
+  prominent?: boolean;
 }
 
-/** Satu renderer untuk sidebar desktop DAN drawer mobile — parity terjamin. */
-function NavGroupBlock({ group, pathname, open, onToggle, onNavigate, touch = false, variant, focusable = true }: GroupProps) {
+/** Satu renderer untuk sidebar desktop DAN drawer mobile — parity terjamin.
+ *  Grup ber-1 item dirender sebagai fitur standalone (bukan accordion palsu). */
+function NavGroupBlock({ group, pathname, open, onToggle, onNavigate, touch = false, variant, focusable = true, prominent = false }: GroupProps) {
   const containsActive = group.items.some((i) => isActive(pathname, i.href));
   const rowPad = touch ? "py-2.5" : "py-2";
 
   // Grup tanpa label atau tunggal → link langsung (bukan parent dummy).
   if (!group.label || group.items.length === 1) {
-    const item = group.items[0];
     return (
       <div className="space-y-0.5">
-        <Link
-          href={item.href}
-          onClick={onNavigate}
-          aria-current={isActive(pathname, item.href) ? "page" : undefined}
-          tabIndex={focusable ? undefined : -1}
-          className={`flex items-center gap-3 rounded-lg px-3 ${rowPad} text-sm font-medium transition-colors ${
-            isActive(pathname, item.href)
-              ? "bg-brand-600 text-white shadow"
-              : "text-slate-600 hover:bg-brand-50 hover:text-brand-800 dark:hover:bg-slate-100/5"
-          }`}
-        >
-          <item.icon className="h-4 w-4" />
-          {item.label}
-        </Link>
+        <NavLinkRow
+          item={group.items[0]}
+          pathname={pathname}
+          onNavigate={onNavigate}
+          touch={touch}
+          prominent={prominent && !group.label}
+          tabbable={focusable}
+        />
       </div>
     );
   }
@@ -80,26 +112,55 @@ function NavGroupBlock({ group, pathname, open, onToggle, onNavigate, touch = fa
         id={`nav-group-${group.id}-${variant}`}
         className={`overflow-hidden transition-[max-height,opacity] duration-200 ease-out motion-reduce:transition-none ${open ? "max-h-96 opacity-100" : "max-h-0 opacity-0"}`}
       >
-        <div className="space-y-0.5 pb-1">
+        <div className="space-y-0.5 pb-1 pt-0.5">
           {group.items.map((i) => (
-            <Link
+            <NavLinkRow
               key={i.href}
-              href={i.href}
-              onClick={onNavigate}
-              aria-current={isActive(pathname, i.href) ? "page" : undefined}
-              tabIndex={open && focusable ? undefined : -1}
-              className={`flex items-center gap-3 rounded-lg px-3 ${rowPad} text-sm font-medium transition-colors ${
-                isActive(pathname, i.href)
-                  ? "bg-brand-600 text-white shadow"
-                  : "text-slate-600 hover:bg-brand-50 hover:text-brand-800 dark:hover:bg-slate-100/5"
-              }`}
-            >
-              <i.icon className="h-4 w-4" />
-              {i.label}
-            </Link>
+              item={i}
+              pathname={pathname}
+              onNavigate={onNavigate}
+              touch={touch}
+              indented
+              tabbable={open && focusable}
+            />
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Daftar navigasi lengkap — SATU komposisi untuk sidebar desktop & drawer mobile:
+ *  Dashboard (primary) → separator → section groups berurutan. */
+function NavList({ sections, pathname, openGroups, toggleGroup, onNavigate, touch = false, variant, focusable = true }: {
+  sections: NavGroup[];
+  pathname: string;
+  openGroups: Set<string>;
+  toggleGroup: (id: string) => void;
+  onNavigate?: () => void;
+  touch?: boolean;
+  variant: "desktop" | "mobile";
+  focusable?: boolean;
+}) {
+  return (
+    <div className="space-y-3">
+      {sections.map((g, gi) => (
+        <Fragment key={g.id}>
+          {/* Zoning: separator proporsional tepat setelah primary navigation */}
+          {gi === 1 && <div aria-hidden="true" className="border-t border-slate-100 dark:border-slate-800" />}
+          <NavGroupBlock
+            group={g}
+            pathname={pathname}
+            open={!g.label || g.items.length === 1 || openGroups.has(g.id)}
+            onToggle={() => toggleGroup(g.id)}
+            onNavigate={onNavigate}
+            touch={touch}
+            focusable={focusable}
+            variant={variant}
+            prominent={g.id === "utama"}
+          />
+        </Fragment>
+      ))}
     </div>
   );
 }
@@ -183,17 +244,7 @@ export default function Sidebar({ role, userName }: { role: Role; userName: stri
 
         {/* Internal scroll: menu panjang tidak mendorong account section keluar layar */}
         <nav aria-label="Navigasi utama" className="flex-1 overflow-y-auto px-3 py-3">
-          {sections.map((g, gi) => (
-            <div key={g.id} className={gi > 0 ? "mt-3" : ""}>
-              <NavGroupBlock
-                group={g}
-                pathname={pathname}
-                open={!g.label || g.items.length === 1 || openGroups.has(g.id)}
-                onToggle={() => toggleGroup(g.id)}
-                variant="desktop"
-              />
-            </div>
-          ))}
+          <NavList sections={sections} pathname={pathname} openGroups={openGroups} toggleGroup={toggleGroup} variant="desktop" />
         </nav>
 
         {/* Account section — selalu terlihat, tak tertutup scroll */}
@@ -258,20 +309,16 @@ export default function Sidebar({ role, userName }: { role: Role; userName: stri
           </div>
 
           <nav aria-label="Navigasi lengkap" className="flex-1 overflow-y-auto overscroll-contain px-3 py-3">
-            {sections.map((g, gi) => (
-              <div key={g.id} className={gi > 0 ? "mt-3" : ""}>
-                <NavGroupBlock
-                  group={g}
-                  pathname={pathname}
-                  open={!g.label || g.items.length === 1 || openGroups.has(g.id)}
-                  onToggle={() => toggleGroup(g.id)}
-                  onNavigate={() => setDrawerOpen(false)}
-                  touch
-                  focusable={drawerOpen}
-                  variant="mobile"
-                />
-              </div>
-            ))}
+            <NavList
+              sections={sections}
+              pathname={pathname}
+              openGroups={openGroups}
+              toggleGroup={toggleGroup}
+              onNavigate={() => setDrawerOpen(false)}
+              touch
+              focusable={drawerOpen}
+              variant="mobile"
+            />
           </nav>
 
           <div className="border-t border-slate-100 p-3">
