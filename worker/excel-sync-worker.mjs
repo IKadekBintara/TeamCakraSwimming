@@ -535,6 +535,48 @@ async function dryRunConfig(cfg) {
 }
 
 // ---------- main loop ----------
+/** Mode one-shot CLI: node excel-sync-worker.mjs --expand-to <N> [configId]
+ *  Menjamin KAPASITAS area peserta minimal N baris memakai mesin expandArea
+ *  (geser signature+merge+style turun), tanpa menyentuh data peserta existing. */
+export async function runExpandTo(minRows, cfgId) {
+  const q = db.from("excel_sync_configurations").select("id, file_path, worksheet_name, first_data_row, max_row, auto_expand, signature_marker");
+  const { data: cfgs } = cfgId ? await q.eq("id", cfgId) : await q;
+  if (!cfgs?.length) throw new Error("config tidak ditemukan");
+
+  for (const cfg of cfgs) {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(cfg.file_path);
+    const ws = wb.getWorksheet(cfg.worksheet_name);
+    if (!ws) throw new Error(`Worksheet "${cfg.worksheet_name}" tidak ditemukan`);
+    const first = cfg.first_data_row;
+    const last = cfg.max_row ?? ws.rowCount;
+    const capacity = Math.max(0, last - first + 1);
+    if (capacity >= minRows) { log(`cfg ${cfg.id}: kapasitas ${capacity} >= ${minRows}, skip`); continue; }
+
+    // expandArea menambah (needed - free): hitung slot kosong agar hasil akhir pas.
+    const nameCol = 4; // kolom NAMA pada struktur NO|KU|PA/PI|NAMA|Tanggal Lahir
+    let free = 0;
+    for (let r = last; r >= first; r--) {
+      if (!normKey(cellText(ws.getCell(r, nameCol)))) free++;
+    }
+    const needed = minRows - capacity + free;
+    const add = expandArea(ws, cfg, needed, nameCol);
+    if (add <= 0) throw new Error(`expandArea tak mengembang (add=${add})`);
+
+    await rmFile(cfg.file_path);
+    await wb.xlsx.writeFile(cfg.file_path);
+    await db.from("excel_sync_configurations").update({
+      max_row: cfg.max_row, updated_at: new Date().toISOString(),
+    }).eq("id", cfg.id);
+    log(`cfg ${cfg.id}: EXPANDED ${capacity} → ${last + add - first + 1} baris (${cfg.file_path})`);
+  }
+}
+
+if (process.argv[2] === "--expand-to") {
+  await runExpandTo(parseInt(process.argv[3], 10), process.argv[4]);
+  process.exit(0);
+}
+
 async function tick() {
   const job = await claimJob();
   if (job) {
