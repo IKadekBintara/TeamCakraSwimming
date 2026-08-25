@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import PaymentVerification from "@/components/PaymentVerification";
 import { rupiah, paymentStatusLabel, type PaymentStatus } from "@/lib/events";
+import { normalizeCakra } from "@/lib/cakra";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +33,7 @@ export default async function FinancePage({ searchParams }: { searchParams: { q?
   const dpCount = rows.filter((p) => p.payment_status === "DP").length;
   const rejectedCount = rows.filter((p) => p.payment_status === "DITOLAK").length;
   const lunasCount = rows.filter((p) => p.payment_status === "LUNAS").length;
-  const cakraSummary = new Map<string, { athletes: number; bills: number; paid: number; count: number }>(); for (const p of rows) { const key = p.cakra || "Tanpa Cakra"; const old = cakraSummary.get(key) ?? { athletes: 0, bills: 0, paid: 0, count: 0 }; old.bills += Number(p.total_amount || 0); old.paid += ["LUNAS", "DP"].includes(p.payment_status) ? Number(p.amount_paid || 0) : 0; old.count += 1; cakraSummary.set(key, old); }
+  const cakraSummary = new Map<string, { athletes: number; bills: number; paid: number; count: number }>(); for (const p of rows) { const key = normalizeCakra(p.cakra); const old = cakraSummary.get(key) ?? { athletes: 0, bills: 0, paid: 0, count: 0 }; old.bills += Number(p.total_amount || 0); old.paid += ["LUNAS", "DP"].includes(p.payment_status) ? Number(p.amount_paid || 0) : 0; old.count += 1; cakraSummary.set(key, old); }
   const pendingRows = (payments ?? []).filter((p) => p.payment_status === "MENUNGGU_VERIFIKASI");
   return <div className="mx-auto max-w-6xl space-y-5 pt-14 lg:pt-0">
     <header className="page-header">

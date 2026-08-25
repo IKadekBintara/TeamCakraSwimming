@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import * as XLSX from "xlsx";
 import { ATTENDANCE_LABELS, DAY_NAMES, STATUS_LABELS } from "@/types";
 import { calculateDolphinKu } from "@/lib/events";
+import { normalizeCakra } from "@/lib/cakra";
 import { rateLimit } from "@/lib/rate-limit";
 
 /** Filename ASCII-safe untuk HTTP header (ByteString) — Unicode tetap aman. */
@@ -279,7 +280,7 @@ export async function GET(req: NextRequest) {
       "ID Transaksi": p.transaction_id,
       "ID Atlet": p.athlete_id,
       "Nama": p.athlete_name,
-      "Cakra": p.cakra ?? "",
+      "Cakra": normalizeCakra(p.cakra),
       "Event": (p.events as { name?: string } | null)?.name ?? "",
       "Jumlah Nomor": p.jumlah_nomor,
       "Uang Pendaftaran": p.registration_fee,

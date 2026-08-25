@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { rupiah } from "@/lib/events";
 import { CAKRA_GROUPS } from "@/lib/events";
+import { normalizeCakra } from "@/lib/cakra";
 
 export const dynamic = "force-dynamic";
 
@@ -81,7 +82,7 @@ export default async function ReportsPage({
     if (["LUNAS", "DP"].includes(p.payment_status)) ev.paid += Number(p.amount_paid || 0);
     byEvent.set(evName, ev);
 
-    const ck = p.cakra || "Tanpa Cakra";
+    const ck = normalizeCakra(p.cakra);
     const cv = byCakra.get(ck) ?? { billed: 0, paid: 0 };
     cv.billed += Number(p.total_amount || 0);
     if (["LUNAS", "DP"].includes(p.payment_status)) cv.paid += Number(p.amount_paid || 0);
@@ -95,7 +96,7 @@ export default async function ReportsPage({
   const { data: athletes } = await supabase.from("athletes").select("cakra, status");
   const cakraStats = new Map<string, { total: number; active: number }>();
   for (const a of athletes ?? []) {
-    const key = a.cakra || "Tanpa Cakra";
+    const key = normalizeCakra(a.cakra);
     const cur = cakraStats.get(key) ?? { total: 0, active: 0 };
     cur.total += 1;
     if (a.status === "ACTIVE") cur.active += 1;
@@ -196,7 +197,7 @@ export default async function ReportsPage({
                     <td className="whitespace-nowrap text-slate-500">{String(p.created_at).slice(0, 10)}</td>
                     <td className="font-medium">{p.athlete_name}</td>
                     <td className="max-w-[160px] truncate">{(p.event as { name?: string } | null)?.name ?? "—"}</td>
-                    <td>{p.cakra || "—"}</td>
+                    <td>{normalizeCakra(p.cakra)}</td>
                     <td>{p.ku}</td>
                     <td className="whitespace-nowrap">{rupiah(p.total_amount)}</td>
                     <td className="whitespace-nowrap text-brand-700">{rupiah(p.amount_paid)}</td>

@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { normalizeCakra } from "@/lib/cakra";
 import * as XLSX from "xlsx";
 import { normalizeWhatsapp } from "@/types";
 
@@ -18,6 +19,7 @@ interface ParsedRow {
   address: string | null;
   program: string | null;
   group_name: string | null;
+  cakra: string | null;
   status: "ACTIVE" | "INACTIVE";
   notes: string | null;
 }
@@ -65,6 +67,7 @@ export default function ImportAthletes() {
         address: cell(r["Alamat"] ?? r["Address"]),
         program: cell(r["Program"]),
         group_name: cell(r["Kelompok"] ?? r["Kelompok Latihan"] ?? r["group"]),
+        cakra: cell(r["Cakra"] ?? r["Kelompok Cakra"] ?? r["cakra"]),
         status: st === "INACTIVE" || st === "NONAKTIF" ? "INACTIVE" : "ACTIVE",
         notes: cell(r["Catatan"] ?? r["Notes"]),
       };
@@ -137,7 +140,13 @@ export default function ImportAthletes() {
           whatsapp: r.whatsapp ? normalizeWhatsapp(r.whatsapp) : null,
           address: r.address,
           program: r.program,
-          group_id: r.group_name ? groupMap.get(r.group_name.toLowerCase()) ?? null : null,
+          cakra: r.cakra ? normalizeCakra(r.cakra) : null,
+          group_id: r.group_name
+            ? groupMap.get(r.group_name.toLowerCase())
+              ?? groupMap.get(r.group_name.toLowerCase().replace(/^team\s+/, ""))
+              ?? groupMap.get(`team ${r.group_name.toLowerCase()}`)
+              ?? null
+            : null,
           status: r.status,
           notes: r.notes,
         }));

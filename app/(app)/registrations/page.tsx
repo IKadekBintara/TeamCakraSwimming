@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { rupiah, paymentStatusLabel, type PaymentStatus } from "@/lib/events";
 import { CAKRA_GROUPS } from "@/lib/events";
+import { normalizeCakra } from "@/lib/cakra";
 
 export const dynamic = "force-dynamic";
 
@@ -252,7 +253,7 @@ export default async function RegistrationsPage({
                         : "—"}
                       {reg?.status && <span className="ml-1 text-xs text-slate-400">({reg.status})</span>}
                     </td>
-                    <td>{r.cakra || "—"}</td>
+                    <td>{normalizeCakra(r.cakra)}</td>
                     <td>{regKu || "—"}</td>
                     <td className="whitespace-nowrap">{rupiah(r.registration_fee)}</td>
                     <td className="whitespace-nowrap text-slate-500">{rupiah(r.admin_fee)}</td>
