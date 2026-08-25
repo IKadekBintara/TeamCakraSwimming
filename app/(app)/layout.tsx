@@ -36,7 +36,8 @@ export default async function AppLayout({
     <div className="flex min-h-screen">
       <Sidebar role={role} userName={name} />
       <main className="relative flex-1 overflow-x-hidden p-4 pb-24 md:p-6 lg:pb-6">
-        <div className="absolute right-4 top-4 z-40 md:right-6 md:top-6">
+        {/* Bell di desktop: pojok kanan atas konten. Di mobile bell pindah ke top-bar (Sidebar) */}
+        <div className="absolute right-4 top-4 z-40 hidden md:right-6 md:top-6 lg:block">
           <NotificationBell />
         </div>
         {children}

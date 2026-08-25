@@ -54,8 +54,8 @@ export default async function EventDetailPage({ params }: { params: { id: string
   return <div className="mx-auto max-w-6xl space-y-5 pt-14 lg:pt-0">
     <Link href="/events" className="text-sm text-brand-700 hover:underline">← Semua Events</Link>
     <div className="card">
-      <div className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-bold">{event.name}</h1><p className="mt-1 text-sm text-slate-500">{event.event_date} · {event.location || "Lokasi belum diatur"}</p></div><div className="flex flex-col items-end gap-2"><span className={`badge ${event.status === "OPEN" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{event.status}</span>{canManage && <EventStatusActions eventId={event.id} status={event.status} />}</div></div>
-      {profile?.role === "admin" && <div className="flex justify-end"><PermanentEventDelete eventId={event.id} eventName={event.name} canManage /></div>}
+      <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h1 className="text-2xl font-bold">{event.name}</h1><p className="mt-1 text-sm text-slate-500 break-words">{event.event_date} · {event.location || "Lokasi belum diatur"}</p></div><div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end"><span className={`badge self-start sm:self-end ${event.status === "OPEN" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{event.status}</span>{canManage && <EventStatusActions eventId={event.id} status={event.status} />}</div></div>
+      {profile?.role === "admin" && <div className="mt-2 flex justify-stretch sm:justify-end"><PermanentEventDelete eventId={event.id} eventName={event.name} canManage /></div>}
       <p className="mt-4 text-sm text-slate-600">{event.description || "Tidak ada deskripsi."}</p>
       <div className="mt-4 flex flex-wrap gap-4 text-sm"><span>Biaya nomor: <strong>{rupiah(event.fee_per_entry)}</strong></span><span>Admin: <strong>{rupiah(event.admin_fee)}</strong></span><span>Deadline: <strong>{event.registration_deadline || "—"}</strong></span></div>
     </div>

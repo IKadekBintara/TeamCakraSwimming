@@ -307,13 +307,13 @@ export default async function DashboardPage() {
           </p>
         </div>
         {isAdmin && (
-          <Link href="/reports" className="btn-secondary text-sm">Laporan Center</Link>
+          <Link href="/reports" className="btn-secondary w-full text-center text-sm sm:w-auto">Laporan Center</Link>
         )}
       </header>
 
       {/* Action area — satu aksi utama, beberapa sekunder, sisanya terlipat */}
       {(primaryAction || secondaryActions.length > 0) && (
-        <nav aria-label="Aksi cepat" className="flex flex-wrap items-center gap-2">
+        <nav aria-label="Aksi cepat" className="flex flex-wrap items-center gap-2 [&>a]:justify-center">
           {primaryAction && (
             <Link href={primaryAction.href} className="btn-primary text-sm">
               <span aria-hidden className="font-bold">+</span> {primaryAction.label}

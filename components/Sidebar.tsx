@@ -9,6 +9,7 @@ import {
   LogOut, ChevronDown, Menu as MenuIcon, X,
 } from "lucide-react";
 import ThemeToggle from "@/components/ThemeToggle";
+import NotificationBell from "@/components/NotificationBell";
 import { filterNavGroups, isActive, mobileShortcuts, type NavGroup, type NavItem } from "@/components/navigation";
 import type { Role } from "@/types";
 
@@ -259,18 +260,23 @@ export default function Sidebar({ role, userName }: { role: Role; userName: stri
       </aside>
 
       {/* ===================== MOBILE TOP BAR ===================== */}
-      <div className="fixed inset-x-0 top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 lg:hidden">
-        <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center overflow-hidden">
+      {/* Grid 3 zona: logo | (kosong) | aksi — tidak ada overlap di viewport sempit.
+          Bell dirender di sini hanya untuk mobile; desktop memakai bell di layout utama. */}
+      <div className="fixed inset-x-0 top-0 z-20 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-slate-200 bg-white px-3 py-2.5 sm:px-4 max-[359px]:grid-cols-1 max-[359px]:gap-1 lg:hidden">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden">
             <Image src="/brand/team-cakra-logo.png" alt="Logo TEAM CAKRA SWIMMING" width={32} height={32} className="h-full w-full object-contain" />
           </span>
-          <div className="leading-tight">
-            <p className="text-sm font-bold text-brand-900">TEAM CAKRA SWIMMING</p>
-          </div>
+          <p className="truncate text-[13px] font-bold tracking-tight text-brand-900 sm:text-sm dark:text-white">TEAM CAKRA SWIMMING</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1 max-[359px]:justify-self-end">
+          <div className="lg:hidden"><NotificationBell /></div>
           <ThemeToggle compact />
-          <button onClick={logout} className="text-sm font-medium text-brand-700">
+          <button
+            onClick={logout}
+            aria-label="Keluar dari akun"
+            className="shrink-0 rounded-lg px-2 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-slate-800"
+          >
             Keluar
           </button>
         </div>
