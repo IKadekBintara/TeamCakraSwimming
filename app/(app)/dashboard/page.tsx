@@ -633,13 +633,15 @@ export default async function DashboardPage() {
 
       {/* Sesi hari ini + kehadiran */}
       <div className="card">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-navy-900">Sesi Latihan Hari Ini</h2>
-          <div className="flex gap-2 text-xs">
-            <span className="badge-success badge">Hadir {present}</span>
-            <span className="badge-warning badge">Izin {excused} / Sakit {sick}</span>
-            <span className="badge-danger badge">Alpa {absent}</span>
-            <span className="badge-info badge">{rate}%</span>
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+          <h2 className="min-w-0 text-base font-semibold text-navy-900">Sesi Latihan Hari Ini</h2>
+          {/* Mobile: badge turun ke baris sendiri & wrap antar-badge (tiap badge utuh).
+              sm ke atas: kembali di kanan judul seperti desktop. */}
+          <div className="flex w-full flex-wrap gap-2 text-xs sm:w-auto sm:justify-end">
+            <span className="badge-success badge whitespace-nowrap">Hadir {present}</span>
+            <span className="badge-warning badge whitespace-nowrap">Izin {excused} / Sakit {sick}</span>
+            <span className="badge-danger badge whitespace-nowrap">Alpa {absent}</span>
+            <span className="badge-info badge whitespace-nowrap">{rate}%</span>
           </div>
         </div>
         {(todaySchedules ?? []).length === 0 ? (
