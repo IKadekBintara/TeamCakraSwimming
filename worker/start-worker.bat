@@ -8,6 +8,7 @@ if not exist .env.local (
   echo [worker] .env.local tidak ditemukan di root repo.
   exit /b 1
 )
+set WORKER_ID=rdp-a1-prod
 :loop
 node worker\excel-sync-worker.mjs >> worker\worker.log 2>&1
 echo [%date% %time%] worker exited, restart in 15s >> worker\worker.log
