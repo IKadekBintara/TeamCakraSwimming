@@ -127,7 +127,9 @@ async function readWorkbookRecords(cfg) {
   for (let c = 1; c <= ws.columnCount; c++) {
     const v = ws.getCell(headerRow, c).value;
     const t = typeof v === "object" && v !== null && v.richText ? v.richText.map((r) => r.text).join("") : v;
-    colByHeader[normKey(t)] = c;
+    const k = normKey(t);
+    // First-wins: header merged (mis. NAMA = D:E) harus resolve ke kolom paling kiri.
+    if (k && !(k in colByHeader)) colByHeader[k] = c;
   }
   const cols = {};
   for (const [field, headerText] of Object.entries(mapping)) {
@@ -159,6 +161,20 @@ function cellText(cell) {
   return String(v).trim();
 }
 
+/** Samakan style sel baris target dengan baris peserta PERTAMA (reference template):
+ *  font/border/alignment disalin penuh agar semua nama atlet konsisten dengan template. */
+function applyTemplateStyle(ws, cfg, targetRow) {
+  const refRow = cfg.first_data_row;
+  if (!refRow || refRow === targetRow) return;
+  for (let c = 1; c <= ws.columnCount; c++) {
+    const src = ws.getCell(refRow, c);
+    const dst = ws.getCell(targetRow, c);
+    if (src.font) dst.font = { ...src.font };
+    if (src.border) dst.border = { ...src.border };
+    if (src.alignment) dst.alignment = { ...src.alignment };
+  }
+}
+
 /** Tulis satu baris atlet pada area config (tanpa menyentuh area lain). */
 async function upsertRegistration(cfg, state, dryRun = false) {
   if (!state) return { outcome: "DELETED", note: "registration hilang" };
@@ -183,7 +199,9 @@ async function upsertRegistration(cfg, state, dryRun = false) {
       }
     }
     if (!dryRun) {
-      if (changed) await wb.xlsx.writeFile(cfg.file_path);
+      applyTemplateStyle(ws, cfg, existing.row);
+      // Selalu tulis: normalisasi style saja (tanpa perubahan nilai) juga harus persisten.
+      await wb.xlsx.writeFile(cfg.file_path);
       await db.from("excel_sync_row_mappings").upsert({
         configuration_id: cfg.id, registration_id: state.registration_id,
         athlete_id: state.athlete_id, excel_row: existing.row,
@@ -215,6 +233,7 @@ async function upsertRegistration(cfg, state, dryRun = false) {
     }
   }
   if (!dryRun) {
+    applyTemplateStyle(ws, cfg, target);
     if (noCol) ws.getCell(target, noCol).value = nextNo;
     if (cols.ku) ws.getCell(target, cols.ku).value = kuShort(state.ku) || "DATA INCOMPLETE";
     if (cols.gender) ws.getCell(target, cols.gender).value = state.gender || "DATA INCOMPLETE";

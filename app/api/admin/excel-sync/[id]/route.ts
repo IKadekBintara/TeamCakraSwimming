@@ -110,7 +110,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         configuration_id: id, action: "reconcile",
         payload: { trigger: "manual_sync_now", requested_by: ctx.userId },
       });
-      if (error) return fail(error.message, 500, rid);
+      if (error) {
+        // Dedupe: job (config, action) yang sama masih PENDING/RETRYING — bukan kegagalan.
+        if ((error as { code?: string }).code === "23505") {
+          await db.from("excel_sync_logs").insert({
+            action: "SYNC_STARTED", configuration_id: id, event_id: cfg.event_id, actor_id: ctx.userId,
+            detail: { trigger: "sync_now", deduped: true },
+          });
+          return NextResponse.json({ ok: true, queued: false, deduped: true, message: "Sync sudah dijadwalkan" });
+        }
+        return fail(error.message, 500, rid);
+      }
       await db.from("excel_sync_logs").insert({
         action: "SYNC_STARTED", configuration_id: id, event_id: cfg.event_id, actor_id: ctx.userId,
         detail: { trigger: "sync_now" },
@@ -141,7 +151,13 @@ export async function POST(req: NextRequest, ctx2: { params: { id: string } }) {
     configuration_id: id, action: b.action,
     payload: { trigger: "manual_diagnostic", requested_by: ctx.userId },
   });
-  if (error) return fail(error.message, 500, rid);
+  if (error) {
+    // Dedupe diagnostik yang masih antre — aman diabaikan (job lama akan memproses).
+    if ((error as { code?: string }).code === "23505") {
+      return NextResponse.json({ ok: true, queued: false, deduped: true, message: "Diagnostik sudah dijadwalkan" });
+    }
+    return fail(error.message, 500, rid);
+  }
   await db.from("excel_sync_logs").insert({
     action: b.action === "test_connection" ? "TEST_CONNECTION_QUEUED" : "DRY_RUN_QUEUED",
     configuration_id: id, event_id: cfg.event_id, actor_id: ctx.userId,

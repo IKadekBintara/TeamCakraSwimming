@@ -43,6 +43,10 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ALL }],
   },
   {
+    id: "performance",
+    items: [{ href: "/performance", label: "Performance", icon: Timer, roles: STAFF }],
+  },
+  {
     id: "akun-saya",
     label: "Akun Saya",
     items: [
@@ -70,11 +74,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/registrations", label: "Pendaftaran", icon: ClipboardList, roles: STAFF },
       { href: "/event-settings", label: "Event Settings", icon: Settings, roles: ADMIN },
     ],
-  },
-  {
-    id: "performance",
-    label: "Performance",
-    items: [{ href: "/performance", label: "Performance", icon: Timer, roles: STAFF }],
   },
   {
     id: "keuangan-laporan",

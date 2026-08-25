@@ -68,7 +68,14 @@ export default function ExcelSyncPage() {
         body: JSON.stringify({ action }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Gagal");
+      if (!res.ok) {
+        // Dedupe aman: job dedupe-key sama masih antre → bukan error merah (23505).
+        if (/duplicate key value violates unique constraint/i.test(json.error ?? "")) {
+          setToast({ msg: json.message || "Sync sudah dijadwalkan — masih diproses antrean" });
+          return;
+        }
+        throw new Error(json.error || "Gagal");
+      }
       for (let i = 0; i < 20; i++) {
         await new Promise((r) => setTimeout(r, 3000));
         const r2 = await fetch("/api/admin/excel-sync");
