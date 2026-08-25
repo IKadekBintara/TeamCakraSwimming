@@ -16,6 +16,7 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import ExcelJS from "exceljs";
+import os from "node:os";
 import { readFileSync } from "node:fs";
 import { statFile, rmFile } from "./fs-utils.mjs";
 import path from "node:path";
@@ -36,24 +37,50 @@ if (!URL || !SRK) {
 const db = createClient(URL, SRK, { auth: { autoRefreshToken: false, persistSession: false } });
 
 const POLL_MS = Number(process.env.EXCEL_SYNC_POLL_MS ?? 5000);
+const HEARTBEAT_MS = Number(process.env.EXCEL_SYNC_HEARTBEAT_MS ?? 15000);
 const MAX_RETRY = 5;
 const STALE_MS = 10 * 60 * 1000;
+
+/** Identitas worker instance: WORKER_ID env > hostname-pid, stabil per proses. */
+const WORKER_ID = process.env.WORKER_ID || `${os.hostname()}#${process.pid}`;
 
 const log = (...a) => console.log(new Date().toISOString(), "[worker]", ...a);
 
 async function heartbeat() {
-  await db.from("excel_sync_settings").update({ worker_heartbeat: new Date().toISOString() }).eq("id", "global");
+  await db.from("excel_sync_settings").update({
+    worker_heartbeat: new Date().toISOString(),
+    worker_id: WORKER_ID,
+  }).eq("id", "global");
+}
+
+/** Heartbeat independen dari loop job — tetap jalan walau job lama/error. */
+let hbTimer = null;
+function startHeartbeatLoop() {
+  if (hbTimer) return;
+  hbTimer = setInterval(() => {
+    heartbeat().catch((e) => log("heartbeat error:", e.message));
+  }, HEARTBEAT_MS);
+  hbTimer.unref?.();
 }
 
 async function syncLog(action, fields) {
   await db.from("excel_sync_logs").insert({ action, ...fields });
 }
 
-/** Ambil satu job PENDING/RETRYING/stale-PROCESSING atomik. */
+/** Ambil satu job PENDING/RETRYING/stale-PROCESSING atomik + catat provenance. */
 async function claimJob() {
   const { data, error } = await db.rpc("fn_excel_sync_claim_job");
   if (error) throw new Error(`claim: ${error.message}`);
-  return data?.[0] ?? null;
+  const job = data?.[0] ?? null;
+  if (job) {
+    // Provenance: siapa mengambil & kapan eksekusi mulai (UTC ISO).
+    await db.from("excel_sync_jobs").update({
+      worker_id: WORKER_ID,
+      started_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq("id", job.id);
+  }
+  return job;
 }
 
 async function globalEnabled() {
@@ -451,7 +478,9 @@ async function runJob(job) {
 
 async function finish(job, status, error, note) {
   await db.from("excel_sync_jobs").update({
-    status, last_error: error ?? note ?? null, processed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    status, last_error: error ?? note ?? null,
+    worker_id: job.worker_id ?? WORKER_ID,
+    processed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
   }).eq("id", job.id);
 }
 
@@ -588,8 +617,9 @@ async function tick() {
 let running = true;
 process.on("SIGINT", () => { running = false; console.log("\n[worker] berhenti setelah iterasi ini"); });
 
-log(`start — poll=${POLL_MS}ms`);
+log(`start — poll=${POLL_MS}ms worker_id=${WORKER_ID} heartbeat=${HEARTBEAT_MS}ms`);
 await heartbeat();
+startHeartbeatLoop();
 while (running) {
   try {
     await tick();
@@ -599,4 +629,5 @@ while (running) {
   }
   await new Promise((r) => setTimeout(r, POLL_MS));
 }
+clearInterval(hbTimer);
 process.exit(0);

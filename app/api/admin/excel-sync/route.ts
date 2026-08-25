@@ -53,16 +53,33 @@ export async function GET() {
     if (s[j.status as keyof typeof s] !== undefined) s[j.status as keyof typeof s] += j.count;
   }
 
-  const { data: hb } = await db.from("excel_sync_settings").select("worker_heartbeat").eq("id", "global").maybeSingle();
+  const { data: hb } = await db.from("excel_sync_settings").select("worker_heartbeat, worker_id").eq("id", "global").maybeSingle();
   const lastBeat = hb?.worker_heartbeat ? new Date(hb.worker_heartbeat) : null;
-  const beatAge = lastBeat ? (Date.now() - lastBeat.getTime()) / 1000 : null;
-  const workerStatus = !lastBeat ? "OFFLINE" : beatAge !== null && beatAge < 120 ? "CONNECTED" : "DEGRADED";
+  const beatAge = lastBeat ? Math.max(0, (Date.now() - lastBeat.getTime()) / 1000) : null;
+  // Status = f(umur heartbeat aktual). Threshold: ONLINE <45s (≈2× interval
+  // heartbeat 15s), DEGRADED <10 menit (masih "hangat", bisa terlambat),
+  // OFFLINE setelahnya. Alasan disertakan agar admin paham dasar status.
+  let workerStatus: string;
+  let statusReason: string;
+  if (!lastBeat || beatAge === null) {
+    workerStatus = "OFFLINE";
+    statusReason = "belum ada heartbeat tercatat";
+  } else if (beatAge < 45) {
+    workerStatus = "CONNECTED";
+    statusReason = `heartbeat ${Math.round(beatAge)} detik lalu`;
+  } else if (beatAge < 600) {
+    workerStatus = "DEGRADED";
+    statusReason = `heartbeat terakhir ${beatAge < 90 ? `${Math.round(beatAge)} detik` : `${Math.round(beatAge / 60)} menit`} lalu`;
+  } else {
+    workerStatus = "OFFLINE";
+    statusReason = `tidak ada heartbeat selama ${Math.round(beatAge / 60)} menit`;
+  }
 
   const logs = await db.from("excel_sync_logs").select("id, action, configuration_id, detail, error_message, created_at").order("created_at", { ascending: false }).limit(50);
 
   return NextResponse.json({
     settings: settings.data,
-    worker: { status: workerStatus, last_heartbeat: lastBeat?.toISOString() ?? null },
+    worker: { status: workerStatus, status_reason: statusReason, worker_id: hb?.worker_id ?? null, last_heartbeat: lastBeat?.toISOString() ?? null },
     configurations: configs.data ?? [],
     job_stats: jobStats,
     logs: logs.data ?? [],

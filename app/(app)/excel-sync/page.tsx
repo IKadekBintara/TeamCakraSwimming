@@ -33,7 +33,7 @@ type JobStats = Partial<Record<"PENDING" | "RETRYING" | "FAILED" | "REVIEW_REQUI
 
 export default function ExcelSyncPage() {
   const [settings, setSettings] = useState<{ enabled: boolean } | null>(null);
-  const [worker, setWorker] = useState<{ status: string; last_heartbeat: string | null } | null>(null);
+  const [worker, setWorker] = useState<{ status: string; status_reason?: string; worker_id?: string | null; last_heartbeat: string | null } | null>(null);
   const [configs, setConfigs] = useState<Config[] | null>(null);
   const [stats, setStats] = useState<Record<string, JobStats>>({});
   const [logs, setLogs] = useState<LogRow[]>([]);
@@ -97,6 +97,11 @@ export default function ExcelSyncPage() {
   }, [load]);
 
   useEffect(() => { load(); }, [load]);
+  // Auto-refresh status near-real-time (10s) — heartbeat & status selalu segar.
+  useEffect(() => {
+    const t = setInterval(() => { load(); }, 10000);
+    return () => clearInterval(t);
+  }, [load]);
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 4000);
@@ -168,13 +173,13 @@ export default function ExcelSyncPage() {
         </div>
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Worker RDP</p>
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-1 flex items-center gap-2">
             <span className={`inline-block h-2.5 w-2.5 rounded-full ${worker?.status === "CONNECTED" ? "bg-emerald-500" : worker?.status === "DEGRADED" ? "bg-amber-500" : "bg-red-500"}`} />
             <span className="text-sm font-medium">{worker?.status ?? "OFFLINE"}</span>
-            {worker?.last_heartbeat && (
-              <span className="text-xs text-slate-500">· detak terakhir {new Date(worker.last_heartbeat).toLocaleTimeString("id-ID")}</span>
-            )}
+            {worker?.status_reason && <span className="text-xs text-slate-500">— {worker.status_reason}</span>}
+            <button onClick={() => load()} className="ml-1 rounded-md border border-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-50">Refresh Status</button>
           </div>
+          {worker?.worker_id && <p className="mt-0.5 text-[11px] text-slate-400">worker: {worker.worker_id}</p>}
           <p className="mt-1 text-xs text-slate-500">Jika OFFLINE, job menunggu dan akan diproses saat worker kembali.</p>
         </div>
       </section>
