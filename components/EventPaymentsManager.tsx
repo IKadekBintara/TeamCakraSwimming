@@ -22,6 +22,8 @@ export type PayRow = {
     id: string;
     status: string;
     total: number;
+    eventFee?: number;
+    adminFee?: number;
     paid: number;
     method: string | null;
     proof: string | null;
@@ -165,7 +167,7 @@ export default function EventPaymentsManager({ rows, eventName, eventId, canMana
         <table className="w-full min-w-[760px] text-sm">
           <thead><tr className="border-b text-left text-xs uppercase text-slate-500">
             <th className="px-2 py-2">Atlet</th><th className="px-2 py-2">KU</th><th className="px-2 py-2">Nomor</th>
-            <th className="px-2 py-2">Pembayaran</th><th className="px-2 py-2">Tagihan</th><th className="px-2 py-2">Aksi</th>
+            <th className="px-2 py-2">Pembayaran</th><th className="px-2 py-2">Uang Event / Admin / Total</th><th className="px-2 py-2">Aksi</th>
           </tr></thead>
           <tbody className="divide-y">
             {rows.map((r) => (
@@ -174,7 +176,7 @@ export default function EventPaymentsManager({ rows, eventName, eventId, canMana
                 <td className="px-2 py-2">{r.ku}</td>
                 <td className="px-2 py-2">{r.entries || "—"}</td>
                 <td className="px-2 py-2"><span className={`badge ${badgeClass(r.pay?.status ?? "")}`}>{r.pay ? paymentStatusLabel(r.pay.status as PaymentStatus) : "—"}</span>{r.pay?.method && <span className="ml-1 text-xs text-slate-400">{r.pay.method}</span>}</td>
-                <td className="px-2 py-2">{r.pay ? rupiah(r.pay.total) : "—"}</td>
+                <td className="px-2 py-2 whitespace-nowrap">{r.pay ? (<span className="text-xs"><strong className="text-brand-700">{rupiah(r.pay.eventFee ?? 0)}</strong><span className="text-slate-400"> / {rupiah(r.pay.adminFee ?? 0)} / </span><strong>{rupiah(r.pay.total)}</strong></span>) : "—"}</td>
                 <td className="px-2 py-2">{actionsCell(r)}</td>
               </tr>
             ))}
@@ -190,7 +192,7 @@ export default function EventPaymentsManager({ rows, eventName, eventId, canMana
             <p className="text-xs text-slate-500">KU {r.ku} · {r.entries || "—"}</p>
             <div className="mt-2 flex items-center justify-between gap-2">
               <span className={`badge ${badgeClass(r.pay?.status ?? "")}`}>{r.pay ? paymentStatusLabel(r.pay.status as PaymentStatus) : "—"}</span>
-              <span className="text-sm font-semibold">{r.pay ? rupiah(r.pay.total) : "—"}</span>
+              <span className="text-right text-sm"><strong className="text-brand-700">{rupiah(r.pay?.eventFee ?? 0)}</strong><span className="text-xs text-slate-400"> / {rupiah(r.pay?.adminFee ?? 0)} / </span><strong>{rupiah(r.pay?.total ?? 0)}</strong></span>
             </div>
             <div className="mt-2">{actionsCell(r)}</div>
           </div>
@@ -208,7 +210,9 @@ export default function EventPaymentsManager({ rows, eventName, eventId, canMana
                 <h3 className="text-lg font-bold">Konfirmasi Pembayaran</h3>
                 <dl className="mt-3 space-y-1 text-sm">
                   <div className="flex justify-between gap-4"><dt className="text-slate-500">Atlet</dt><dd className="font-medium">{modal.row.athlete}</dd></div>
-                  <div className="flex justify-between gap-4"><dt className="text-slate-500">Nominal</dt><dd className="font-medium">{rupiah(modal.row.pay!.total)}</dd></div>
+                  <div className="flex justify-between gap-4"><dt className="text-slate-500">Uang event</dt><dd>{rupiah(modal.row.pay!.eventFee ?? 0)}</dd></div>
+                  <div className="flex justify-between gap-4"><dt className="text-slate-500">Uang admin</dt><dd>{rupiah(modal.row.pay!.adminFee ?? 0)}</dd></div>
+                  <div className="flex justify-between gap-4"><dt className="text-slate-500">Total tagihan</dt><dd className="font-medium">{rupiah(modal.row.pay!.total)}</dd></div>
                   <div className="flex justify-between gap-4"><dt className="text-slate-500">Status sebelumnya</dt><dd>{paymentStatusLabel(modal.row.pay!.status as PaymentStatus)}</dd></div>
                   <div className="flex justify-between gap-4"><dt className="text-slate-500">Status baru</dt><dd className="font-semibold text-emerald-700">{modal.action === "verify" ? "Lunas" : "Ditolak"}</dd></div>
                 </dl>

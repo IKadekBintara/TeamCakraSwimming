@@ -95,7 +95,7 @@ export default async function DashboardPage() {
     supabase.from("training_groups").select("id, name, is_active").eq("is_active", true),
     supabase.from("training_group_members").select("group_id, athlete_id").is("left_at", null),
     supabase.from("events").select("id, name, status, event_date, location, registration_deadline").order("event_date", { ascending: false }),
-    supabase.from("event_payments").select("event_id, cakra, total_amount, amount_paid, payment_status"),
+    supabase.from("event_payments").select("event_id, cakra, registration_fee, admin_fee, total_amount, amount_paid, payment_status"),
     supabase.from("event_registrations").select("id, event_id"),
     supabase.from("audit_logs").select("id, action, entity, created_at, profiles(full_name)").order("created_at", { ascending: false }).limit(8),
     supabase.from("profiles").select("role, full_name").eq("id", (await supabase.auth.getUser()).data.user?.id ?? "").maybeSingle(),
@@ -142,17 +142,22 @@ export default async function DashboardPage() {
   const pendingCount = payments.filter((p) => p.payment_status === "MENUNGGU_VERIFIKASI").length;
   const transactionCount = payments.filter((p) => p.payment_status !== "CANCELLED").length;
   const totalRevenue = payments.filter((p) => ["LUNAS", "DP"].includes(p.payment_status)).reduce((n, p) => n + Number(p.amount_paid || 0), 0);
+  // Pemisahan komponen biaya: UANG EVENT (pendapatan event) ≠ UANG ADMIN.
+  const finEventRevenue = payments.filter((p) => ["LUNAS", "DP"].includes(p.payment_status)).reduce((n, p) => n + Number(p.registration_fee || 0), 0);
+  const finAdminRevenue = payments.filter((p) => ["LUNAS", "DP"].includes(p.payment_status)).reduce((n, p) => n + Number(p.admin_fee || 0), 0);
 
   // ===== Financial overview =====
   const finBills = payments.filter((p) => p.payment_status !== "CANCELLED").reduce((n, p) => n + Number(p.total_amount || 0), 0);
+  const finBillsEvent = payments.filter((p) => p.payment_status !== "CANCELLED").reduce((n, p) => n + Number(p.registration_fee || 0), 0);
   const finPaid = payments.filter((p) => ["LUNAS", "DP"].includes(p.payment_status)).reduce((n, p) => n + Number(p.amount_paid || 0), 0);
   const finOutstanding = payments.filter((p) => ["BELUM_BAYAR"].includes(p.payment_status)).reduce((n, p) => n + Number(p.total_amount || 0), 0)
     + payments.filter((p) => p.payment_status === "DP").reduce((n, p) => n + Math.max(Number(p.total_amount || 0) - Number(p.amount_paid || 0), 0), 0);
   const statusCount = (s: string) => payments.filter((p) => p.payment_status === s).length;
 
   const finRows = [
-    { label: "Total tagihan", value: finBills, tone: "bg-navy-500" },
-    { label: "Sudah dibayar (terverifikasi)", value: finPaid, tone: "bg-brand-600" },
+    { label: "Total tagihan (event + admin)", value: finBills, tone: "bg-navy-500" },
+    { label: "Uang Event (pendapatan event)", value: finBillsEvent, tone: "bg-brand-600" },
+    { label: "Sudah dibayar (terverifikasi)", value: finPaid, tone: "bg-emerald-500" },
     { label: "Belum dibayar", value: finOutstanding, tone: "bg-red-400" },
   ];
   const finMax = Math.max(...finRows.map((r) => r.value), 1);
@@ -391,7 +396,7 @@ export default async function DashboardPage() {
         <StatCard label="Menunggu Pembayaran" value={unpaidCount} tone="text-red-600 dark:text-red-400" />
         <StatCard label="Menunggu Verifikasi" value={pendingCount} tone="text-amber-600 dark:text-amber-400" />
         <StatCard label="Total Pembayaran" value={`${transactionCount}`} hint="transaksi tercatat" />
-        <StatCard label="Total Pendapatan" value={rupiah(totalRevenue)} tone="text-emerald-700 dark:text-emerald-400" hint={`Tagihan ${rupiah(finBills)}`} />
+        <StatCard label="Total Pendapatan" value={rupiah(totalRevenue)} tone="text-emerald-700 dark:text-emerald-400" hint={`Uang Event ${rupiah(finEventRevenue)} + Admin ${rupiah(finAdminRevenue)}`} />
       </section>
 
       {/* Financial + Activity */}

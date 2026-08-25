@@ -22,7 +22,7 @@ export default async function EventDetailPage({ params }: { params: { id: string
     supabase.from("event_races").select("id,name,allowed_kus,is_relay,sort_order,price,is_free").eq("event_id", params.id).eq("is_active", true).order("sort_order"),
     supabase.from("athletes").select("id,full_name,birth_date").eq("status", "ACTIVE").order("full_name"),
     supabase.from("training_group_members").select("athlete_id,training_groups(name)").is("left_at", null),
-    supabase.from("event_registrations").select("id,athlete_id,ku,ku_override,status,athletes(full_name),event_registration_entries(event_races(name)),event_payments(id,payment_status,total_amount,amount_paid,remaining_amount,payment_proof,payment_method)").eq("event_id", params.id).order("created_at", { ascending: false }),
+    supabase.from("event_registrations").select("id,athlete_id,ku,ku_override,status,athletes(full_name),event_registration_entries(event_races(name)),event_payments(id,payment_status,total_amount,registration_fee,admin_fee,amount_paid,remaining_amount,payment_proof,payment_method)").eq("event_id", params.id).order("created_at", { ascending: false }),
   ]);
   if (!event) notFound();
 
@@ -40,6 +40,8 @@ export default async function EventDetailPage({ params }: { params: { id: string
         id: p.id,
         status: String(p.payment_status),
         total: Number(p.total_amount || 0),
+        eventFee: Number(p.registration_fee || 0),
+        adminFee: Number(p.admin_fee || 0),
         paid: Number(p.amount_paid || 0),
         method: p.payment_method,
         proof: p.payment_proof,
@@ -57,7 +59,7 @@ export default async function EventDetailPage({ params }: { params: { id: string
       <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h1 className="text-2xl font-bold">{event.name}</h1><p className="mt-1 text-sm text-slate-500 break-words">{event.event_date} · {event.location || "Lokasi belum diatur"}</p></div><div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end"><span className={`badge self-start sm:self-end ${event.status === "OPEN" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{event.status}</span>{canManage && <EventStatusActions eventId={event.id} status={event.status} />}</div></div>
       {profile?.role === "admin" && <div className="mt-2 flex justify-stretch sm:justify-end"><PermanentEventDelete eventId={event.id} eventName={event.name} canManage /></div>}
       <p className="mt-4 text-sm text-slate-600">{event.description || "Tidak ada deskripsi."}</p>
-      <div className="mt-4 flex flex-wrap gap-4 text-sm"><span>Biaya nomor: <strong>{rupiah(event.fee_per_entry)}</strong></span><span>Admin: <strong>{rupiah(event.admin_fee)}</strong></span><span>Deadline: <strong>{event.registration_deadline || "—"}</strong></span></div>
+      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm"><span>Biaya nomor (uang event): <strong>{rupiah(event.fee_per_entry)}</strong></span><span className="text-slate-500">Admin: <strong>{rupiah(event.admin_fee)}</strong></span><span>Deadline: <strong>{event.registration_deadline || "—"}</strong></span></div>
     </div>
     <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
       {canRegister && <EventRegistrationForm event={event} races={races ?? []} athletes={formAthletes} canManage={canManage} />}

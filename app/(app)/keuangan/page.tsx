@@ -7,11 +7,12 @@ export const dynamic = "force-dynamic";
 
 const PAYMENT_STATUSES: PaymentStatus[] = ["BELUM_BAYAR", "MENUNGGU_VERIFIKASI", "DP", "LUNAS", "DITOLAK", "CANCELLED"];
 
-function Metric({ label, value, accent }: { label: string; value: string; accent?: string }) {
+function Metric({ label, value, accent, hint }: { label: string; value: string; accent?: string; hint?: string }) {
   return (
     <div className="stat-card">
       <p className="stat-label">{label}</p>
       <p className={`stat-value ${accent ?? ""}`}>{value}</p>
+      {hint && <p className="mt-0.5 text-xs text-slate-400">{hint}</p>}
     </div>
   );
 }
@@ -20,10 +21,12 @@ export default async function FinancePage({ searchParams }: { searchParams: { q?
   const supabase = createClient(); const q = searchParams.q?.trim() ?? ""; const status = searchParams.status ?? "ALL"; const cakra = searchParams.cakra ?? "ALL";
   let query = supabase.from("event_payments").select("id,transaction_id,athlete_name,cakra,jumlah_nomor,registration_fee,admin_fee,total_amount,amount_paid,remaining_amount,payment_proof,payment_method,payment_status,notes,event:events(name)").order("created_at", { ascending: false });
   if (q) query = query.ilike("athlete_name", `%${q}%`); if (status !== "ALL") query = query.eq("payment_status", status); if (cakra !== "ALL") query = query.eq("cakra", cakra);
-  const [{ data: payments }, { data: summary }] = await Promise.all([query, supabase.from("event_payments").select("total_amount,amount_paid,remaining_amount,payment_status,cakra")]);
+  const [{ data: payments }, { data: summary }] = await Promise.all([query, supabase.from("event_payments").select("total_amount,registration_fee,admin_fee,amount_paid,remaining_amount,payment_status,cakra")]);
   const rows = summary ?? [];
   const totalBill = rows.filter((p) => p.payment_status !== "CANCELLED").reduce((n, p) => n + Number(p.total_amount || 0), 0);
+  const totalBillEvent = rows.filter((p) => p.payment_status !== "CANCELLED").reduce((n, p) => n + Number(p.registration_fee || 0), 0);
   const totalPaid = rows.filter((p) => ["LUNAS", "DP"].includes(p.payment_status)).reduce((n, p) => n + Number(p.amount_paid || 0), 0);
+  const paidEvent = rows.filter((p) => ["LUNAS", "DP"].includes(p.payment_status)).reduce((n, p) => n + Number(p.registration_fee || 0), 0);
   const pending = rows.filter((p) => p.payment_status === "MENUNGGU_VERIFIKASI").length;
   const unpaid = rows.filter((p) => p.payment_status === "BELUM_BAYAR").length;
   const dpCount = rows.filter((p) => p.payment_status === "DP").length;
@@ -41,10 +44,10 @@ export default async function FinancePage({ searchParams }: { searchParams: { q?
     </header>
 
     <section aria-label="Ringkasan pembayaran" className="grid grid-cols-2 gap-3 md:grid-cols-4">
-      <Metric label="Total Tagihan" value={rupiah(totalBill)} />
-      <Metric label="Uang Masuk" value={rupiah(totalPaid)} accent="!text-brand-600" />
+      <Metric label="Total Tagihan (event + admin)" value={rupiah(totalBill)} />
+      <Metric label="Uang Event" value={rupiah(totalBillEvent)} hint={`Masuk ${rupiah(paidEvent)}`} accent="!text-brand-600" />
+      <Metric label="Uang Masuk" value={rupiah(totalPaid)} hint={`event + admin · verifikasi ${pending}`} />
       <Metric label="Belum Bayar" value={String(unpaid)} accent="!text-red-600" />
-      <Metric label="Menunggu Verifikasi" value={String(pending)} accent="!text-amber-500" />
     </section>
     <div className="flex flex-wrap gap-2 text-xs">
       <span className="badge-success badge">Lunas {lunasCount}</span>

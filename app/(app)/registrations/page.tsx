@@ -46,7 +46,7 @@ export default async function RegistrationsPage({
   // Query utama — KU hidup di event_registrations (bukan event_payments).
   let query = supabase
     .from("event_payments")
-    .select("id, transaction_id, registration_id, athlete_id, athlete_name, cakra, total_amount, amount_paid, remaining_amount, payment_status, payment_method, created_at, event:events(id,name), registration:event_registrations(ku,status)", { count: "exact" })
+    .select("id, transaction_id, registration_id, athlete_id, athlete_name, cakra, registration_fee, admin_fee, total_amount, amount_paid, remaining_amount, payment_status, payment_method, created_at, event:events(id,name), registration:event_registrations(ku,status)", { count: "exact" })
     .order("created_at", { ascending: false })
     .range(from, from + PAGE_SIZE - 1);
   if (q) query = query.ilike("athlete_name", `%${q}%`);
@@ -147,7 +147,7 @@ export default async function RegistrationsPage({
         <div className="table-wrap">
           <table className="table !min-w-[880px]">
             <thead>
-              <tr><th>Atlet</th><th>Event</th><th>Cakra</th><th>KU</th><th>Total</th><th>Dibayar</th><th>Status</th><th>Detail</th></tr>
+              <tr><th>Atlet</th><th>Event</th><th>Cakra</th><th>KU</th><th>Uang Event</th><th>Admin</th><th>Total</th><th>Dibayar</th><th>Status</th><th>Detail</th></tr>
             </thead>
             <tbody>
               {filtered.map((r) => {
@@ -168,6 +168,8 @@ export default async function RegistrationsPage({
                     </td>
                     <td>{r.cakra || "—"}</td>
                     <td>{regKu || "—"}</td>
+                    <td className="whitespace-nowrap">{rupiah(r.registration_fee)}</td>
+                    <td className="whitespace-nowrap text-slate-500">{rupiah(r.admin_fee)}</td>
                     <td className="whitespace-nowrap font-medium">{rupiah(r.total_amount)}</td>
                     <td className="whitespace-nowrap text-brand-700">{rupiah(r.amount_paid)}</td>
                     <td><span className={badgeClass(r.payment_status)}>{paymentStatusLabel(r.payment_status as PaymentStatus)}</span></td>

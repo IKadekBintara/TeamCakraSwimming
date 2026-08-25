@@ -46,7 +46,7 @@ export default async function ReportsPage({
   // ===== Payment report rows (dengan filter) =====
   let payQuery = supabase
     .from("event_payments")
-    .select("transaction_id, athlete_name, cakra, ku, total_amount, amount_paid, remaining_amount, payment_status, created_at, event:events(name)")
+    .select("transaction_id, athlete_name, cakra, ku, registration_fee, admin_fee, total_amount, amount_paid, remaining_amount, payment_status, created_at, event:events(name)")
     .gte("created_at", `${from}T00:00:00`)
     .lte("created_at", `${to}T23:59:59`)
     .order("created_at", { ascending: false });
@@ -62,6 +62,9 @@ export default async function ReportsPage({
   const valid = payments.filter((p) => p.payment_status !== "CANCELLED");
   const totalRevenue = sum(payments.filter((p) => ["LUNAS", "DP"].includes(p.payment_status)), (p) => Number(p.amount_paid || 0));
   const totalBilled = sum(valid, (p) => Number(p.total_amount || 0));
+  // Pemisahan komponen: UANG EVENT (pendapatan event) ≠ UANG ADMIN.
+  const totalBilledEvent = sum(valid, (p) => Number(p.registration_fee || 0));
+  const totalRevenueEvent = sum(payments.filter((p) => ["LUNAS", "DP"].includes(p.payment_status)), (p) => Number(p.registration_fee || 0));
   const totalOutstanding =
     sum(valid.filter((p) => p.payment_status === "BELUM_BAYAR"), (p) => Number(p.total_amount || 0)) +
     sum(valid.filter((p) => p.payment_status === "DP"), (p) => Math.max(Number(p.total_amount || 0) - Number(p.amount_paid || 0), 0));
@@ -213,7 +216,9 @@ export default async function ReportsPage({
           <h3 className="card-title mb-3">Financial Summary</h3>
           <dl className="space-y-2 text-sm">
             <div className="flex justify-between"><dt className="text-slate-600">Total Registration Revenue</dt><dd className="font-semibold">{rupiah(totalRevenue)}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-600">Total Tagihan</dt><dd className="font-semibold">{rupiah(totalBilled)}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-600">— Uang Event (pendapatan event)</dt><dd className="font-semibold text-brand-700">{rupiah(totalRevenueEvent)}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-600">Total Tagihan (event + admin)</dt><dd className="font-semibold">{rupiah(totalBilled)}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-600">— Uang Event (billed)</dt><dd className="font-semibold text-brand-700">{rupiah(totalBilledEvent)}</dd></div>
             <div className="flex justify-between"><dt className="text-slate-600">Outstanding</dt><dd className="font-semibold text-red-600">{rupiah(totalOutstanding)}</dd></div>
             <div className="flex justify-between"><dt className="text-slate-600">Transaksi DP</dt><dd className="font-semibold">{dpCount}</dd></div>
           </dl>
