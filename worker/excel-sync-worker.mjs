@@ -169,10 +169,77 @@ function applyTemplateStyle(ws, cfg, targetRow) {
   for (let c = 1; c <= ws.columnCount; c++) {
     const src = ws.getCell(refRow, c);
     const dst = ws.getCell(targetRow, c);
-    if (src.font) dst.font = { ...src.font };
-    if (src.border) dst.border = { ...src.border };
-    if (src.alignment) dst.alignment = { ...src.alignment };
+    dst.style = { ...src.style };
   }
+  try { ws.getRow(targetRow).height = ws.getRow(refRow).height ?? undefined; } catch {}
+}
+
+/** Auto-expand area peserta bila slot tidak cukup: seluruh blok di bawah area
+ *  (nilai + style + tinggi baris + merge) digeser turun `add` baris, lalu baris
+ *  baru diberi style baris referensi. Blok tanda tangan/stempel ikut turun utuh.
+ *  Return jumlah baris yang ditambahkan (0 bila tidak perlu). */
+function expandArea(ws, cfg, needed, nameCol) {
+  const first = cfg.first_data_row;
+  const last = cfg.max_row ?? ws.rowCount;
+  let free = 0;
+  for (let r = last; r >= first; r--) {
+    if (!normKey(cellText(ws.getCell(r, nameCol)))) free++;
+  }
+  if (needed <= free) return 0;
+  const add = needed - free;
+
+  // 1) Geser isi dari paling bawah ke atas agar tidak saling menimpa.
+  const maxCol = Math.max(ws.columnCount || 9, 9);
+  for (let r = ws.rowCount; r > last; r--) {
+    for (let c = 1; c <= maxCol; c++) {
+      const src = ws.getCell(r, c);
+      const dst = ws.getCell(r + add, c);
+      dst.value = src.value;
+      dst.style = { ...src.style };
+    }
+    try { ws.getRow(r + add).height = ws.getRow(r).height ?? undefined; } catch {}
+    for (let c = 1; c <= maxCol; c++) {
+      const src = ws.getCell(r, c);
+      src.value = null;
+      src.style = {};
+    }
+    try { ws.getRow(r).height = undefined; } catch {}
+  }
+  // 2) Geser semua merge yang berada sepenuhnya di bawah area (`last`).
+  const model = ws.model;
+  if (model && Array.isArray(model.merges)) {
+    for (let i = 0; i < model.merges.length; i++) {
+      const m = model.merges[i];
+      const s = typeof m === "string" ? m : m.range ?? String(m);
+      const mm = /([A-Z]+)(\d+):([A-Z]+)(\d+)/.exec(String(s));
+      if (!mm) continue;
+      const r1 = parseInt(mm[2], 10);
+      if (r1 <= last) continue;
+      const shifted = `${mm[1]}${r1 + add}:${mm[3]}${parseInt(mm[4], 10) + add}`;
+      model.merges[i] = typeof m === "string" ? shifted : { ...m, range: shifted };
+    }
+  }
+  // 3) Slot baru diberi style baris peserta referensi (font konsisten)
+  //    + replikasi layout merge baris referensi (mis. NAMA=D:E, Tanggal=F:I).
+  const refMerges = [];
+  const model0 = ws.model;
+  if (model0 && Array.isArray(model0.merges)) {
+    for (const m of model0.merges) {
+      const s = typeof m === "string" ? m : m.range ?? String(m);
+      const mm = /([A-Z]+)(\d+):([A-Z]+)(\d+)/.exec(String(s));
+      if (!mm) continue;
+      if (parseInt(mm[2], 10) === first && parseInt(mm[4], 10) === first) refMerges.push(s);
+    }
+  }
+  for (let r = last + 1; r <= last + add; r++) {
+    applyTemplateStyle(ws, cfg, r);
+    for (const s of refMerges) {
+      const mm = /([A-Z]+)(\d+):([A-Z]+)(\d+)/.exec(s);
+      try { ws.mergeCells(`${mm[1]}${r}:${mm[3]}${r}`); } catch {}
+    }
+  }
+  cfg.max_row = last + add;
+  return add;
 }
 
 /** Tulis satu baris atlet pada area config (tanpa menyentuh area lain). */
@@ -220,8 +287,16 @@ async function upsertRegistration(cfg, state, dryRun = false) {
     if (!occupied) { target = r; break; }
   }
   if (target === null) {
-    if (cfg.max_row) return { outcome: "REVIEW_REQUIRED", note: `AREA_FULL: tidak ada slot kosong sampai r${cfg.max_row}` };
-    target = lastRow + 1;
+    // Auto-expand: perluas area peserta (geser blok bawah + merge), lalu tulis.
+    // Default ON (kolom belum terisi = undefined dianggap aktif); matikan via auto_expand=false.
+    if (cfg.auto_expand === false) return { outcome: "REVIEW_REQUIRED", note: `AREA_FULL: tidak ada slot kosong sampai r${cfg.max_row}` };
+    const added = expandArea(ws, cfg, 1, cols.name);
+    if (!added) return { outcome: "REVIEW_REQUIRED", note: "AREA_FULL: expand gagal" };
+    target = lastRow + added;
+    cfg._expanded = added;
+    if (!dryRun && cfg.id) await db.from("excel_sync_configurations").update({
+      max_row: target, updated_at: new Date().toISOString(),
+    }).eq("id", cfg.id);
   }
   // NO = nomor urut berikutnya (maksimum existing + 1)
   const noCol = cols.no;
