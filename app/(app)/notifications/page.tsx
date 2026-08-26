@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getAuth } from "@/lib/supabase/auth-helper";
 import { redirect } from "next/navigation";
 import NotificationList from "@/components/NotificationList";
 import NotificationPrefsForm from "@/components/NotificationPrefsForm";
@@ -11,9 +12,7 @@ export default async function NotificationsPage({
   searchParams: { filter?: string };
 }) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getAuth();
   if (!user) redirect("/login");
 
   const filter = searchParams.filter === "unread" ? "unread" : "all";

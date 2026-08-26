@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getAuth } from "@/lib/supabase/auth-helper";
 import EventForm from "@/components/EventForm";
 import { rupiah } from "@/lib/events";
 
@@ -21,7 +22,7 @@ export default async function EventsPage({
   const supabase = createClient();
   const [{ data: events }, { data: profile }, { data: regs }] = await Promise.all([
     supabase.from("events").select("id, name, event_date, location, description, contact_person, contact_whatsapp, payment_instructions, fee_per_entry, admin_fee, status, registration_deadline").order("event_date", { ascending: false }),
-    supabase.from("profiles").select("role").eq("id", (await supabase.auth.getUser()).data.user?.id ?? "").maybeSingle(),
+    supabase.from("profiles").select("role").eq("id", ((await getAuth()).user?.id ?? "")).maybeSingle(),
     supabase.from("event_registrations").select("id, event_id"),
   ]);
   const canManage = profile?.role === "admin";

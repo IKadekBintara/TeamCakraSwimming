@@ -1,3 +1,4 @@
+node_modules/
 worker/*.log
 tmp-*.txt
 .env.local

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getAuth } from "@/lib/supabase/auth-helper";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { formatTime } from "@/lib/performance";
@@ -11,11 +12,8 @@ export const dynamic = "force-dynamic";
 
 export default async function CommunicationPage() {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, profile } = await getAuth();
   if (!user) redirect("/login");
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
   if (!profile || !["admin", "operator"].includes(profile.role)) {
     return (
       <div className="card p-8 text-center">

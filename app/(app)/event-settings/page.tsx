@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getAuth } from "@/lib/supabase/auth-helper";
 import EventSettings from "@/components/EventSettings";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +9,7 @@ export const metadata: Metadata = { title: "Event Settings" };
 
 export default async function EventSettingsPage() {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user } = await getAuth();
   if (!user) redirect("/login");
   const { data: profile } = await supabase.from("profiles").select("role,account_status").eq("id", user.id).maybeSingle();
   if (profile?.role !== "admin" || profile.account_status !== "ACTIVE") redirect("/events");

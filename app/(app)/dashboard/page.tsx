@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getAuth } from "@/lib/supabase/auth-helper";
 import StatCard from "@/components/StatCard";
 import GrowthChart, { type GrowthPoint } from "@/components/GrowthChart";
 import GroupDistribution from "@/components/GroupDistribution";
@@ -98,7 +99,7 @@ export default async function DashboardPage() {
     supabase.from("event_payments").select("event_id, cakra, registration_fee, admin_fee, total_amount, amount_paid, payment_status"),
     supabase.from("event_registrations").select("id, event_id"),
     supabase.from("audit_logs").select("id, action, entity, created_at, profiles(full_name)").order("created_at", { ascending: false }).limit(8),
-    supabase.from("profiles").select("role, full_name").eq("id", (await supabase.auth.getUser()).data.user?.id ?? "").maybeSingle(),
+    supabase.from("profiles").select("role, full_name").eq("id", ((await getAuth()).user?.id ?? "")).maybeSingle(),
     supabase.from("athlete_performance_results").select("id, athlete_id, stroke, distance, time_cs, recorded_at, athletes(cakra)"),
   ]);
 

@@ -1,11 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
+import { getAuth } from "@/lib/supabase/auth-helper";
 import PaymentSettingsForm from "@/components/PaymentSettingsForm";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user } = await getAuth();
   const { data: profile } = user ? await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle() : { data: null };
   const { data: settings } = await supabase.from("payment_settings").select("bank_name,account_number,account_name,ewallet_name,ewallet_number,instructions,bank_transfer_enabled,ewallet_enabled,cash_enabled").eq("id", true).maybeSingle();
   return <div className="mx-auto max-w-2xl space-y-5 pt-14 lg:pt-0">

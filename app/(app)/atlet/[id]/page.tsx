@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getAuth } from "@/lib/supabase/auth-helper";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ATTENDANCE_LABELS, STATUS_LABELS, waLink, mapsLink } from "@/types";
@@ -25,7 +26,7 @@ export default async function AtletDetailPage({
 
   if (!athlete) notFound();
 
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", (await supabase.auth.getUser()).data.user?.id ?? "").maybeSingle();
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", ((await getAuth()).user?.id ?? "")).maybeSingle();
   const role = profile?.role ?? "parent";
   const canManagePerf = role === "admin" || role === "operator" || role === "coach" || role === "group_leader" || role === "ketua_kelompok";
 

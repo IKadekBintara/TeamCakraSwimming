@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getAuth } from "@/lib/supabase/auth-helper";
 import EventRegistrationForm from "@/components/EventRegistrationForm";
 import PaymentProofForm from "@/components/PaymentProofForm";
 import RelayTeamForm from "@/components/RelayTeamForm";
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
 
 export default async function EventDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user } = await getAuth();
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user?.id ?? "").maybeSingle();
   const canManage = profile?.role === "admin" || profile?.role === "operator";
   const canRegister = canManage || profile?.role === "parent" || profile?.role === "athlete";

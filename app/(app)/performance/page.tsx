@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getAuth } from "@/lib/supabase/auth-helper";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import PerformanceResultForm from "@/components/PerformanceResultForm";
@@ -30,7 +31,7 @@ export default async function PerformancePage({
   searchParams: { q?: string; cakra?: string; ku?: string; stroke?: string; from?: string; to?: string; event?: string; page?: string; edit?: string };
 }) {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user } = await getAuth();
   if (!user) redirect("/login");
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
   const role = profile?.role ?? "parent";
