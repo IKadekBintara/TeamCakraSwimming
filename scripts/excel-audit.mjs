@@ -27,7 +27,7 @@ const fmtDate = (v) => {
   if (isNaN(d)) return String(v);
   return `${pad2(d.getUTCDate())}/${pad2(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
 };
-const papi = (g) => (/^L|^MALE|PRIA/i.test(String(g ?? "")) ? "PA" : /^P|^FEMALE|WANITA/i.test(String(g ?? "")) ? "PI" : "");
+const papi = (g) => { const s = String(g ?? "").trim().toUpperCase(); return /^(M|L|MALE|PRIA|LK)/.test(s) ? "PA" : /^(F|P|WANITA|PR|PEREMPUAN|Female)/.test(s) ? "PI" : ""; };
 const kuShort = (k) => { const s = String(k ?? "").trim().toUpperCase(); return s.startsWith("KU ") ? s.slice(3) : s; };
 // legacyDate: nilai Excel terbaca = DB bila diinterpretasi mm/dd → artefak penulis format lama.
 const legacyDate = (ex, wantDDMM) => {
