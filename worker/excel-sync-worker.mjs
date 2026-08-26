@@ -269,28 +269,79 @@ function expandArea(ws, cfg, needed, nameCol) {
   return add;
 }
 
-/** Tulis satu baris atlet pada area config (tanpa menyentuh area lain). */
+/** Tulis satu baris atlet pada area config (tanpa menyentuh area lain).
+ *  IDENTITAS: baris ditentukan oleh MAPPING STABIL (config+registration → excel_row),
+ *  bukan nama. Rename/koreksi typo TIDAK PERNAH membuat baris baru — nama pada
+ *  baris terpetakan diperbarui; baris duplikat peninggalan bug lama dibersihkan. */
 async function upsertRegistration(cfg, state, dryRun = false) {
   if (!state) return { outcome: "DELETED", note: "registration hilang" };
   const { wb, ws, cols, records } = await readWorkbookRecords(cfg);
+
+  // 1) Mapping stabil untuk registrasi ini.
+  let map = null;
+  if (cfg.id && state.registration_id) {
+    const { data: m } = await db.from("excel_sync_row_mappings").select("*")
+      .eq("configuration_id", cfg.id).eq("registration_id", state.registration_id).maybeSingle();
+    map = m ?? null;
+  }
+
+  // 2) Resolusi baris target: mapping dulu, fallback pencocokan nama (legacy).
   const key = normKey(state.name);
-  const existing = records.find((rec) => rec.key === key);
+  let existing = null;
+  let resolvedBy = "name";
+  const inArea = (r) => Number.isInteger(r) && r >= cfg.first_data_row && (!cfg.max_row || r <= cfg.max_row);
+  if (map && inArea(map.excel_row)) {
+    // Tolak bila baris terpetakan kini diklaim registrasi lain (konflik mapping).
+    const { data: clash } = await db.from("excel_sync_row_mappings").select("registration_id")
+      .eq("configuration_id", cfg.id).eq("excel_row", map.excel_row)
+      .neq("registration_id", state.registration_id).limit(1);
+    if ((clash ?? []).length > 0) {
+      return { outcome: "REVIEW_REQUIRED", note: `mapping r${map.excel_row} dipakai registrasi lain` };
+    }
+    existing = {
+      row: map.excel_row,
+      key: normKey(cols.name ? cellText(ws.getCell(map.excel_row, cols.name)) : ""),
+      values: Object.fromEntries(Object.entries(cols).filter(([, c]) => c).map(([f, c]) => [f, cellText(ws.getCell(map.excel_row, c))])),
+    };
+    resolvedBy = "mapping";
+  } else {
+    existing = records.find((rec) => rec.key === key) ?? null;
+  }
 
   if (!dryRun) await markProcessing();
 
   if (existing) {
+    const notes = [`matched_by=${resolvedBy}`];
     // Duplicate protection: sudah ada.
     const incompleteFix = cfg.duplicate_strategy === "update_empty_fields";
     let changed = false;
     for (const field of ["ku", "gender", "birth_date"]) {
       const col = cols[field];
       if (!col || !incompleteFix) continue;
-      const cur = existing.values[field];
-      const want = field === "ku" ? kuShort(state.ku) : field === "gender" ? state.gender : state.birth_date;
+      const cur = String(existing.values[field] ?? "").trim();
+      const want = String(field === "ku" ? kuShort(state.ku) : field === "gender" ? state.gender : state.birth_date ?? "").trim();
       if (!cur && want) { ws.getCell(existing.row, col).value = want; changed = true; }
-      else if (cur && want && cur.replace(/\s+/g, "") !== want.replace(/\s+/g, "")) {
+      else if (cur && want && cur.replace(/\s+/g, "").toUpperCase() !== want.replace(/\s+/g, "").toUpperCase()) {
         return { outcome: "REVIEW_REQUIRED", note: `DATA_MISMATCH ${field} @r${existing.row}: excel="${cur}" db="${want}"` };
       }
+    }
+    // RENAME / NORMALISASI CASE: perbarui sel nama pada baris terpetakan
+    // bila teks mentahnya berbeda dari bentuk kanonik UPPERCASE di DB.
+    const rawName = String(existing.values.name ?? "").trim();
+    if (cols.name && rawName !== String(state.name || "").toUpperCase()) {
+      ws.getCell(existing.row, cols.name).value = String(state.name || "").toUpperCase();
+      changed = true;
+      notes.push(`rename@r${existing.row}`);
+    }
+    // Bersihkan baris duplikat peninggalan bug lama: baris LAIN dengan nama lama/baru
+    // identik (bukan baris target) adalah duplikat registrasi ini.
+    for (const rec of records) {
+      if (rec.row === existing.row) continue;
+      if (rec.key !== key && (!map?.athlete_key || rec.key !== normKey(map.athlete_key))) continue;
+      for (const col of Object.values(cols)) if (col) ws.getCell(rec.row, col).value = null;
+      notes.push(`dup-cleaned@r${rec.row}`);
+      if (!dryRun) await db.from("excel_sync_row_mappings")
+        .delete().eq("configuration_id", cfg.id).eq("excel_row", rec.row);
     }
     if (!dryRun) {
       applyTemplateStyle(ws, cfg, existing.row);
@@ -299,11 +350,11 @@ async function upsertRegistration(cfg, state, dryRun = false) {
       await db.from("excel_sync_row_mappings").upsert({
         configuration_id: cfg.id, registration_id: state.registration_id,
         athlete_id: state.athlete_id, excel_row: existing.row,
-        athlete_key: key, athlete_name: state.name,
+        athlete_key: key, athlete_name: String(state.name || "").toUpperCase(),
         synced_values: state, updated_at: new Date().toISOString(),
       }, { onConflict: "configuration_id,registration_id" });
     }
-    return { outcome: changed ? "UPDATED" : "SKIPPED_EXISTING", row: existing.row };
+    return { outcome: changed ? "UPDATED" : "SKIPPED_EXISTING", row: existing.row, note: notes.join(", ") };
   }
 
   // Tidak ada → cari slot kosong pertama dalam area (atau append bila max_row null).
@@ -339,13 +390,13 @@ async function upsertRegistration(cfg, state, dryRun = false) {
     if (noCol) ws.getCell(target, noCol).value = nextNo;
     if (cols.ku) ws.getCell(target, cols.ku).value = kuShort(state.ku) || "DATA INCOMPLETE";
     if (cols.gender) ws.getCell(target, cols.gender).value = state.gender || "DATA INCOMPLETE";
-    if (cols.name) ws.getCell(target, cols.name).value = state.name;
+    if (cols.name) ws.getCell(target, cols.name).value = String(state.name || "").toUpperCase();
     if (cols.birth_date) ws.getCell(target, cols.birth_date).value = state.birth_date || "DATA INCOMPLETE";
     await wb.xlsx.writeFile(cfg.file_path);
     await db.from("excel_sync_row_mappings").upsert({
       configuration_id: cfg.id, registration_id: state.registration_id,
       athlete_id: state.athlete_id, excel_row: target,
-      athlete_key: key, athlete_name: state.name,
+      athlete_key: key, athlete_name: String(state.name || "").toUpperCase(),
       synced_values: state, updated_at: new Date().toISOString(),
     }, { onConflict: "configuration_id,registration_id" });
   }
@@ -488,14 +539,14 @@ async function finish(job, status, error, note) {
 async function reconcile(cfg) {
   const { data: regs } = await db.from("event_registrations")
     .select("id").eq("event_id", cfg.event_id).neq("status", "CANCELLED");
-  const summary = { db_registrations: regs?.length ?? 0, inserted: 0, skipped_existing: 0, review: 0, errors: [] };
+  const summary = { db_registrations: regs?.length ?? 0, inserted: 0, skipped_existing: 0, review: 0, review_details: [], errors: [] };
   for (const r of regs ?? []) {
     try {
       const state = await fetchCurrentState(r.id);
       // Tulis NYATA (bukan dryRun) — reconcile adalah mekanisme backfill.
       const res = await upsertRegistration(cfg, state);
       if (res.outcome === "INSERTED" || res.outcome === "UPDATED") summary.inserted++;
-      else if (res.outcome === "REVIEW_REQUIRED") summary.review++;
+      else if (res.outcome === "REVIEW_REQUIRED") { summary.review++; summary.review_details.push(`${state.name}: ${res.note}`); }
       else summary.skipped_existing++;
     } catch (e) {
       summary.errors.push(`${r.id}: ${e.message}`);

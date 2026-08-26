@@ -56,7 +56,7 @@ export default function ImportAthletes() {
       const g = cell(r["JK"] ?? r["Gender"] ?? r["Jenis Kelamin"]);
       const st = (cell(r["Status"]) ?? "ACTIVE").toUpperCase();
       return {
-        full_name: cell(r["Nama Lengkap"] ?? r["Nama"] ?? r["full_name"]) ?? "",
+        full_name: (cell(r["Nama Lengkap"] ?? r["Nama"] ?? r["full_name"]) ?? "").toUpperCase(),
         nickname: cell(r["Panggilan"] ?? r["Nickname"]),
         birth_date: cell(r["Tanggal Lahir"] ?? r["birth_date"]),
         gender: g === "M" || g === "L" || g === "Laki-laki" ? "M" : g === "F" || g === "P" || g === "Perempuan" ? "F" : null,

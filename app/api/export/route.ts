@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
     }
 
     const rows = (data ?? []).map((a) => ({
-      "Nama Lengkap": a.full_name,
+      "Nama Lengkap": String(a.full_name ?? "").toUpperCase(),
       "Panggilan": a.nickname,
       "Tanggal Lahir": a.birth_date,
       "JK": a.gender,

@@ -74,7 +74,7 @@ export default function AthleteForm({
     setError(null);
 
     const payload = {
-      full_name: form.full_name.trim(),
+      full_name: form.full_name.trim().toUpperCase(),
       nickname: form.nickname || null,
       birth_date: form.birth_date || null,
       gender: (form.gender || null) as "M" | "F" | null,
