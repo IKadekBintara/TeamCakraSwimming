@@ -111,6 +111,20 @@ export default function AthleteForm({
         await supabase.from("audit_logs").insert({
           action: "update_athlete", entity: "athletes", entity_id: athleteId, new_value: payload,
         });
+        // Rename → sinkronkan snapshot athlete_name pada arsip pembayaran.
+        // Identity tetap athlete_id; nama hanya atribut yang ikut diperbarui.
+        if (payload.full_name && payload.full_name !== athlete!.full_name) {
+          const { error: snapErr } = await supabase
+            .from("event_payments")
+            .update({ athlete_name: payload.full_name })
+            .eq("athlete_id", athleteId);
+          if (snapErr) {
+            await supabase.from("audit_logs").insert({
+              action: "athlete_snapshot_sync_failed", entity: "event_payments",
+              entity_id: athleteId, old_value: { error: snapErr.message },
+            });
+          }
+        }
       }
 
       if (form.status === "ACTIVE") {

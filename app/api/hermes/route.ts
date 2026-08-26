@@ -224,6 +224,14 @@ export async function POST(req: NextRequest) {
         const { data: before } = await supabase.from("athletes").select("*").eq("id", athleteId).single();
         const { error } = await supabase.from("athletes").update(payload).eq("id", athleteId);
         if (error) throw error;
+        // Rename → sinkronkan snapshot athlete_name di arsip pembayaran (identity tetap athlete_id).
+        if (payload.full_name) {
+          const { error: snapErr } = await supabase
+            .from("event_payments")
+            .update({ athlete_name: String(payload.full_name).trim().toUpperCase() })
+            .eq("athlete_id", athleteId);
+          if (snapErr) throw new Error(`Snapshot pembayaran gagal disinkronkan: ${snapErr.message}`);
+        }
         await supabase.from("audit_logs").insert({
           actor_id: null,
           action: "hermes_update_athlete",

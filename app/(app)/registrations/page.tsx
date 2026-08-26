@@ -151,6 +151,15 @@ export default async function RegistrationsPage({
   }
   const filtered = raceFilteredIds ? displayRows.filter((r) => raceFilteredIds!.has(r.id)) : displayRows;
 
+  // Nama live per athlete_id (fallback bila snapshot athlete_name belum tersinkron
+  // setelah rename). Identity tetap athlete_id; nama hanya tampilan.
+  const liveNames = new Map<string, string>();
+  const needNameIds = Array.from(new Set(filtered.map((r) => r.athlete_id).filter((x): x is string => typeof x === "string")));
+  if (needNameIds.length > 0) {
+    const { data: nameRows } = await supabase.from("athletes").select("id, full_name").in("id", needNameIds);
+    for (const n of nameRows ?? []) liveNames.set(n.id, n.full_name);
+  }
+
   // Daftar race untuk dropdown (mengikuti pilihan event bila ada)
   let raceOptions: { id: string; name: string }[] = [];
   if (fEvent !== "ALL") {
@@ -242,7 +251,7 @@ export default async function RegistrationsPage({
                       <div className="flex items-baseline gap-2">
                         <span className="w-6 shrink-0 text-right text-xs font-semibold tabular-nums text-slate-400" aria-label={`Nomor urut ${from + i + 1}`}>{from + i + 1}</span>
                         <div className="min-w-0">
-                          <p className="font-medium">{r.athlete_name}</p>
+                          <p className="font-medium">{(r.athlete_id ? liveNames.get(r.athlete_id) : null) ?? r.athlete_name}</p>
                           <p className="text-xs text-slate-400">{r.transaction_id?.slice(0, 8)}…</p>
                         </div>
                       </div>
