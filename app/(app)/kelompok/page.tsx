@@ -8,14 +8,25 @@ export const dynamic = "force-dynamic";
 export default async function KelompokPage() {
   const supabase = createClient();
 
-  const [{ data: groups }, { data: coaches }, { data: leaders }, { data: members }, { data: schedules }, { data: allAthletes }] = await Promise.all([
-    supabase.from("training_groups").select("*, coaches(full_name), leader:leader_id(full_name)").order("name"),
+  const [{ data: groups, error: groupsError }, { data: coaches }, { data: leaders }, { data: members }, { data: schedules }, { data: allAthletes }] = await Promise.all([
+    supabase.from("training_groups").select("*, coaches(full_name)").order("name"),
     supabase.from("coaches").select("id, full_name").order("full_name"),
     supabase.from("profiles").select("id, full_name, role").in("role", ["group_leader", "coach", "admin"]).order("full_name"),
     supabase.from("training_group_members").select("id, group_id, athlete_id, athletes(full_name, status)").is("left_at", null),
     supabase.from("training_schedules").select("*").order("day_of_week").order("start_time"),
     supabase.from("athletes").select("id, full_name, status").eq("status", "ACTIVE").order("full_name"),
   ]);
+
+  // leader_id has no FK to profiles, so embedded lookup fails server-side;
+  // resolve leader names via a separate profiles fetch keyed by leader_id.
+  const leaderIds = Array.from(
+    new Set((groups ?? []).map((g) => g.leader_id).filter((v): v is string => Boolean(v)))
+  );
+  const { data: leaderProfiles } =
+    leaderIds.length > 0
+      ? await supabase.from("profiles").select("id, full_name").in("id", leaderIds)
+      : { data: [] as { id: string; full_name: string }[] };
+  const leaderNameById = new Map((leaderProfiles ?? []).map((p) => [p.id, p.full_name]));
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 pt-14 lg:pt-0">
@@ -25,6 +36,12 @@ export default async function KelompokPage() {
           Kelompok bersifat dinamis — tambah kelompok baru kapan saja tanpa mengubah kode
         </p>
       </div>
+
+      {groupsError && (
+        <div className="card border border-red-200 bg-red-50 text-sm text-red-700">
+          Gagal memuat kelompok dari database: {groupsError.message}
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-3 lg:col-span-2">
@@ -53,7 +70,7 @@ export default async function KelompokPage() {
                     </p>
                     <p className="text-xs text-slate-400">
                       Pelatih: {(g.coaches as { full_name?: string } | null)?.full_name ?? "—"} •{" "}
-                      Ketua: {(g.leader as { full_name?: string } | null)?.full_name ?? "—"} •{" "}
+                      Ketua: {(g.leader_id ? leaderNameById.get(g.leader_id) : null) ?? "—"} •{" "}
                       {groupMembers.length} atlet
                     </p>
                   </div>

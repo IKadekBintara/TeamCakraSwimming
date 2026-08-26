@@ -159,15 +159,26 @@ export async function GET(req: NextRequest) {
     filename = `absensi-${from}_${to}.xlsx`;
   } else if (kind === "groups") {
     stage = "query.groups";
-    const { data } = await supabase
+    // leader_id has no FK to profiles; embedded lookup would fail the whole
+    // query, so resolve leader names via a separate profiles fetch.
+    const { data: groupRows, error: groupsErr } = await supabase
       .from("training_groups")
-      .select("name, location, is_active, coaches(full_name), leader:leader_id(full_name)")
+      .select("id, name, location, is_active, coach_id, leader_id, coaches(full_name)")
       .order("name");
-    const rows = (data ?? []).map((g) => ({
+    if (groupsErr) throw new Error(`query.groups: ${groupsErr.message}`);
+    const leaderIds = Array.from(
+      new Set((groupRows ?? []).map((g) => g.leader_id).filter((v): v is string => Boolean(v)))
+    );
+    const { data: leaderProfiles } =
+      leaderIds.length > 0
+        ? await supabase.from("profiles").select("id, full_name").in("id", leaderIds)
+        : { data: [] as { id: string; full_name: string }[] };
+    const leaderNameById = new Map((leaderProfiles ?? []).map((p) => [p.id, p.full_name]));
+    const rows = (groupRows ?? []).map((g) => ({
       "Nama Kelompok": g.name,
       "Lokasi": g.location,
       "Pelatih": (g.coaches as { full_name?: string } | null)?.full_name ?? "",
-      "Ketua": (g.leader as { full_name?: string } | null)?.full_name ?? "",
+      "Ketua": (g.leader_id ? leaderNameById.get(g.leader_id) : null) ?? "",
       "Aktif": g.is_active ? "Ya" : "Tidak",
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Kelompok");
