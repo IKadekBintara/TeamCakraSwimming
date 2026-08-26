@@ -154,6 +154,19 @@ if (cols.no) {
   for (const n of nums) { if (seen.has(n)) diag.numbering_dup.push(n); seen.add(n); }
   for (let i = 1; i <= Math.max(...nums, 0); i++) if (!seen.has(i)) diag.numbering_gaps.push(i);
 }
+// blank row DI TENGAH data: baris kosong yang diapit dua baris terisi (layout gap).
+// Bedakan dengan ruang kosong SETELAH data terakhir — itu bagian template/area sengaja.
+{
+  let lastFilled = 0;
+  for (let r = cfg.first_data_row; r <= (cfg.max_row ?? ws.rowCount); r++) {
+    if (claimedRows.has(r) || rows.some((x) => x.row === r)) lastFilled = r;
+  }
+  diag.blank_mid = [];
+  for (let r = cfg.first_data_row; r < lastFilled; r++) {
+    const filled = claimedRows.has(r) || rows.some((x) => x.row === r);
+    if (!filled) diag.blank_mid.push(r);
+  }
+}
 
 console.log(`atlet_supabase=${states.length}  baris_excel=${rows.length}  mapping=${maps?.length ?? 0}`);
 console.log(`duplikat_nama_excel=[${diag.dup_excel_names.join("; ") || "-"}]`);
@@ -163,12 +176,14 @@ console.log(`orphan_excel=[${diag.orphan_rows.map((o) => `r${o.row}:${o.name}`).
 console.log(`mapping_stale=[${diag.stale_map.join("; ") || "-"}]`);
 console.log(`beda_field=${diag.field_diffs.length}`, diag.field_diffs.slice(0, 6));
 console.log(`nomor_bolong=[${diag.numbering_gaps.join(",") || "-"}]  nomor_duplikat=[${diag.numbering_dup.join(",") || "-"}]`);
+console.log(`blank_row_tengah=[${(diag.blank_mid ?? []).join(",") || "-"}]  (kosong SETELAH data terakhir tidak dihitung — bagian template)`);
 
 if (!FIX) { console.log("\n(mode audit saja — jalankan ulang dengan --fix untuk reparasi aman)"); process.exit(0); }
 
 // ---------- REPAIR ----------
-let fixed = { updated_fields: 0, legacy_dates: 0, inserted: 0, cleared_orphan: 0, cleared_dup: 0, renumbered: 0, needs_review: [] };
+let fixed = { updated_fields: 0, legacy_dates: 0, inserted: 0, cleared_orphan: 0, cleared_dup: 0, renumbered: 0, compacted: 0, col_widths: 0, needs_review: [] };
 const setCell = (r, f, v) => { if (cols[f]) ws.getCell(r, cols[f]).value = v; };
+const pendingMapMoves = []; // kompaksi: {id:{configuration_id,registration_id}, to}
 
 // 1) perbaiki field beda pada baris terpetakan (Supabase = source of truth)
 for (const st of states) {
@@ -245,6 +260,29 @@ for (const rec of rows) {
   }
 }
 
+// 3b) KOMPAKSI: geser isi baris ke atas menutup blank row di tengah data.
+//     Mapping excel_row di-update mengikuti — athlete_id & data TIDAK berubah.
+{
+  const lastFilled = Math.max(0, ...(claimedRows.size ? [...claimedRows] : []), ...rows.map((x) => x.row));
+  let write = cfg.first_data_row;
+  for (let r = cfg.first_data_row; r <= lastFilled; r++) {
+    const filled = claimedRows.has(r) || rows.some((x) => x.row === r);
+    if (!filled) continue;
+    if (write !== r) {
+      // pindahkan seluruh sel kolom mapping + properti baris (tinggi/borders ikut)
+      for (const f of Object.keys(cols)) {
+        if (!cols[f]) continue;
+        const src = ws.getCell(r, cols[f]), dst = ws.getCell(write, cols[f]);
+        dst.value = src.value; dst.style = JSON.parse(JSON.stringify(src.style ?? {})); dst.font = src.font; dst.border = src.border;
+        src.value = null; src.style = {}; src.border = undefined; src.alignment = undefined;
+      }
+      ws.getRow(write).height = ws.getRow(r).height;
+      const m = Object.values(mapByReg).find((mm) => mm.excel_row === r);
+      if (m) { pendingMapMoves.push({ id: { configuration_id: m.configuration_id, registration_id: m.registration_id }, to: write }); }
+    }
+    write++;
+  }
+}
 // 4) RENOMOR urut 1..N berdasarkan urutan baris terisi (tanpa duplikat, tanpa bolong)
 if (cols.no) {
   let n = 1;
@@ -254,6 +292,43 @@ if (cols.no) {
     const cur = cellText(ws.getCell(r, cols.no)).trim();
     if (cur !== String(n)) { ws.getCell(r, cols.no).value = n; fixed.renumbered++; }
     n++;
+  }
+}
+
+// 3c) AUTO-WIDTH: kolom KU, NAMA, Tanggal Lahir harus terbaca penuh.
+{
+  const targets = [["ku", 8], ["name", 42], ["birth_date", 16]];
+  for (const [f, maxW] of targets) {
+    const c = cols[f];
+    if (!c) continue;
+    const col = ws.getColumn(c);
+    let need = 10;
+    const header = cellText(ws.getCell((cfg.first_data_row ?? 21) - 1, c)) || String(col.header ?? "");
+    need = Math.max(need, Math.min(String(header).length + 2, maxW));
+    for (const st of states) {
+      const m = mapByReg[st.registration_id];
+      if (!m) continue;
+      let v = "";
+      if (f === "name") v = st.name;
+      else if (f === "birth_date") v = fmtDate(st.birth_date);
+      else if (f === "ku") v = kuShort(st.ku);
+      need = Math.max(need, Math.min(String(v).length + 2, maxW));
+    }
+    const before = col.width ?? 8.43;
+    const targetW = Math.min(Math.max(need, 9), maxW);
+    if ((col.width ?? 0) < targetW - 0.1) {
+      col.width = targetW; fixed.col_widths++;
+      // wrap text agar nilai panjang tetap terbaca bila dibatasi max
+      for (const st of states) {
+        const m = mapByReg[st.registration_id];
+        if (!m) continue;
+        const v = f === "name" ? st.name : f === "birth_date" ? fmtDate(st.birth_date) : kuShort(st.ku);
+        if (m && String(v ?? "").length + 2 > maxW) {
+          const cell = ws.getCell(m.excel_row, c);
+          cell.alignment = { ...cell.alignment, wrapText: true };
+        }
+      }
+    }
   }
 }
 
@@ -287,6 +362,15 @@ if (cols.no) {
       for (const [r, c, v] of intended) ws.getCell(r, c).value = v;
     }
   }
+}
+// Kompaksi menggeser baris → update excel_row di tabel mapping (athlete_id & data tetap).
+if (pendingMapMoves.length) {
+  for (const mv of pendingMapMoves) {
+    await db.from("excel_sync_row_mappings").update({ excel_row: mv.to }).match(mv.id);
+    const m = mapByReg[mv.id.registration_id];
+    if (m) m.excel_row = mv.to;
+  }
+  fixed.compacted = pendingMapMoves.length;
 }
 // POST-WRITE CHECK: baca ulang dari disk untuk membuktikan tulisan benar-benar mendarat
 {
@@ -352,5 +436,29 @@ const bdOk = (maps2 ?? []).every((m) => {
   return !want || !cur || cur === want;
 });
 okv(bdOk, "semua tanggal lahir baris terpetakan = kanonik dd/mm/yyyy");
+// tidak ada blank row di TENGAH data (setelah data terakhir = area template, dikecualikan)
+{
+  const claimed2 = new Set((maps2 ?? []).map((m) => m.excel_row));
+  let lastFilled2 = 0;
+  for (let r = cfg.first_data_row; r <= (cfg.max_row ?? ws2.rowCount); r++) {
+    if (claimed2.has(r) || rows2.some((x) => x.row === r)) lastFilled2 = r;
+  }
+  let midBlank = 0;
+  for (let r = cfg.first_data_row; r < lastFilled2; r++) {
+    if (!claimed2.has(r) && !rows2.some((x) => x.row === r)) midBlank++;
+  }
+  okv(midBlank === 0, `tidak ada blank row di tengah data (area setelah data terakhir dikecualikan)`, midBlank ? `${midBlank} baris` : "");
+}
+// lebar kolom cukup untuk seluruh nilai (KU/NAMA/Tanggal Lahir)
+{
+  const wchecks = [["ku", kuShort, 8], ["name", (s) => s.name, 42], ["birth_date", (s) => fmtDate(s.birth_date), 16]];
+  for (const [f, view, maxW] of wchecks) {
+    const c = cols[f];
+    if (!c) continue;
+    const width = ws2.getColumn(c).width ?? 8.43;
+    const longest = Math.max(...states.map((s) => String(view(s) ?? "").length), 0);
+    okv(width >= Math.min(longest + 2, maxW) - 0.1, `lebar kolom ${f} cukup (width=${Number(width).toFixed(1)}, butuh≈${Math.min(longest + 2, maxW)})`);
+  }
+}
 console.log(vFail === 0 ? "\n=== VERIFIKASI AKHIR: SEMUA PASS ===" : `\n=== VERIFIKASI AKHIR: ${vFail} FAIL ===`);
 process.exit(vFail === 0 ? 0 : 1);
