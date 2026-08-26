@@ -201,6 +201,41 @@ function applyTemplateStyle(ws, cfg, targetRow) {
   try { ws.getRow(targetRow).height = ws.getRow(refRow).height ?? undefined; } catch {}
 }
 
+/** Jaga lebar kolom KU agar label panjang ("KU 2021-KEATAS") tidak terpotong. */
+function ensureKuWidth(ws, cfg, cols) {
+  try {
+    const c = cols?.ku;
+    if (!c) return;
+    let longest = 0;
+    const last = cfg.max_row ?? ws.rowCount;
+    for (let r = cfg.first_data_row; r <= last; r++) {
+      const t = cellText(ws.getCell(r, c));
+      if (t.length > longest) longest = t.length;
+    }
+    const want = Math.max(longest + 3, 16);
+    const col = ws.getColumn(c);
+    if (!col.width || col.width < want) col.width = want;
+  } catch {} // kosmetik — tidak boleh menggagalkan sync
+}
+
+/** READ-BACK: baca ulang file dari disk dan pastikan nilai yang ditulis
+ *  benar-benar persisten. Gagal = throw → job masuk RETRY/FAILED,
+ *  bukan SUCCESS palsu. */
+async function readBackVerify(cfg, row, cols, expected) {
+  const wb2 = new ExcelJS.Workbook();
+  await wb2.xlsx.readFile(cfg.file_path);
+  const ws2 = wb2.getWorksheet(cfg.worksheet_name);
+  if (!ws2) throw new Error(`READBACK: worksheet "${cfg.worksheet_name}" hilang setelah save`);
+  for (const [field, wantVal] of Object.entries(expected)) {
+    const c = cols[field];
+    if (!c || wantVal === undefined || wantVal === null || String(wantVal) === "") continue;
+    const got = cellText(ws2.getCell(row, c)).replace(/\s+/g, " ").trim().toUpperCase();
+    const want = String(wantVal).replace(/\s+/g, " ").trim().toUpperCase();
+    if (got !== want) throw new Error(`READBACK MISMATCH ${field} @r${row}: file="${got}" vs tulis="${want}"`);
+  }
+}
+
+
 /** Auto-expand area peserta bila slot tidak cukup: seluruh blok di bawah area
  *  (nilai + style + tinggi baris + merge) digeser turun `add` baris, lalu baris
  *  baru diberi style baris referensi. Blok tanda tangan/stempel ikut turun utuh.
@@ -347,6 +382,10 @@ async function upsertRegistration(cfg, state, dryRun = false) {
       applyTemplateStyle(ws, cfg, existing.row);
       // Selalu tulis: normalisasi style saja (tanpa perubahan nilai) juga harus persisten.
       await wb.xlsx.writeFile(cfg.file_path);
+      await readBackVerify(cfg, existing.row, cols, {
+        ku: kuShort(state.ku), gender: state.gender,
+        birth_date: state.birth_date ?? "", name: String(state.name || "").toUpperCase(),
+      });
       await db.from("excel_sync_row_mappings").upsert({
         configuration_id: cfg.id, registration_id: state.registration_id,
         athlete_id: state.athlete_id, excel_row: existing.row,
@@ -392,7 +431,12 @@ async function upsertRegistration(cfg, state, dryRun = false) {
     if (cols.gender) ws.getCell(target, cols.gender).value = state.gender || "DATA INCOMPLETE";
     if (cols.name) ws.getCell(target, cols.name).value = String(state.name || "").toUpperCase();
     if (cols.birth_date) ws.getCell(target, cols.birth_date).value = state.birth_date || "DATA INCOMPLETE";
+    ensureKuWidth(ws, cfg, cols);
     await wb.xlsx.writeFile(cfg.file_path);
+    await readBackVerify(cfg, target, cols, {
+      ku: kuShort(state.ku), gender: state.gender,
+      birth_date: state.birth_date ?? "", name: String(state.name || "").toUpperCase(),
+    });
     await db.from("excel_sync_row_mappings").upsert({
       configuration_id: cfg.id, registration_id: state.registration_id,
       athlete_id: state.athlete_id, excel_row: target,
