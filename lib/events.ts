@@ -1,8 +1,19 @@
 import type { Athlete } from "@/types";
 
-export const CAKRA_GROUPS = [
-  "Cakra 1", "Cakra 2", "Cakra 3", "Cakra 4", "Cakra 5", "Cakra 6", "Cakra Atlet", "Cakra Azzahro",
-] as const;
+import { createClient } from "@/lib/supabase/server";
+
+export async function getCakraGroups() {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("training_groups")
+    .select("id, name")
+    .order("name");
+  if (error) {
+    console.error("Failed to fetch groups:", error);
+    return [];
+  }
+  return data;
+}
 
 export type EventStatus = "DRAFT" | "OPEN" | "CLOSED" | "CANCELLED";
 export type PaymentStatus = "BELUM_BAYAR" | "MENUNGGU_VERIFIKASI" | "DP" | "LUNAS" | "DITOLAK" | "CANCELLED";

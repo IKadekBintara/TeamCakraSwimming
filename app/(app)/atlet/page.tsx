@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { STATUS_LABELS } from "@/types";
-import { CAKRA_GROUPS, calculateDolphinKu } from "@/lib/events";
+import { getCakraGroups, calculateDolphinKu } from "@/lib/events";
 import { getProfile } from "@/lib/page-guard";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +33,7 @@ export default async function AtletPage({
   const supabase = createClient();
   const q = searchParams.q?.trim() ?? "";
   const status = searchParams.status ?? "ACTIVE";
-  const fCakra = searchParams.cakra ?? "ALL";
+  const fGroup = searchParams.group ?? "ALL";
   const fKu = searchParams.ku ?? "ALL";
   const sort = SORTS.some((s) => s.key === searchParams.sort) ? searchParams.sort! : "name";
   const page = Math.max(1, Number(searchParams.page || 1));
@@ -49,7 +49,7 @@ export default async function AtletPage({
 
   if (q) query = query.or(`full_name.ilike.%${q}%,nickname.ilike.%${q}%`);
   if (status !== "ALL") query = query.eq("status", status);
-  if (fCakra !== "ALL") query = query.eq("cakra", fCakra);
+  // filter group akan dilakukan setelah fetch relasi
   if (sort === "name") query = query.order("full_name");
   else if (sort === "name_desc") query = query.order("full_name", { ascending: false });
   else query = query.order("join_date", { ascending: false });
@@ -63,14 +63,27 @@ export default async function AtletPage({
   const { data: memberships } = ids.length
     ? await supabase
         .from("training_group_members")
-        .select("athlete_id, training_groups(name)")
+        .select("athlete_id, group_id")
         .in("athlete_id", ids)
         .is("left_at", null)
     : { data: [] as never[] };
 
+  // Ambil daftar grup untuk mapping ID -> nama
+  const groups = await getCakraGroups();
+  const groupMap = Object.fromEntries(groups.map(g => [g.id, g.name]));
+
   const groupOf: Record<string, string> = {};
   for (const m of memberships ?? []) {
-    groupOf[m.athlete_id] = (m.training_groups as { name?: string } | null)?.name ?? "";
+    groupOf[m.athlete_id] = groupMap[m.group_id] || "";
+  }
+
+  // Filter berdasarkan group jika dipilih
+  let filteredRows = rows;
+  if (fGroup !== "ALL") {
+    const groupName = groupMap[fGroup];
+    filteredRows = rows.filter(a => groupOf[a.id] === groupName);
+  } else {
+    filteredRows = rows;
   }
 
   const counts = { ACTIVE: 0, INACTIVE: 0, LEFT_CLUB: 0 };
@@ -85,7 +98,7 @@ export default async function AtletPage({
 
   const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
   const qs = (over: Record<string, string>) => {
-    const sp = new URLSearchParams({ q, status, cakra: fCakra, ku: fKu, sort, page: String(page), ...over });
+    const sp = new URLSearchParams({ q, status, group: fGroup, ku: fKu, sort, page: String(page), ...over });
     return `/atlet?${sp.toString()}`;
   };
 
@@ -125,10 +138,10 @@ export default async function AtletPage({
         <label className="label sm:col-span-2">Cari
           <input name="q" defaultValue={q} placeholder="Nama atau panggilan…" className="input" />
         </label>
-        <label className="label">Cakra
-          <select name="cakra" defaultValue={fCakra} className="input">
+        <label className="label">Kelompok
+          <select name="group" defaultValue={fGroup} className="input">
             <option value="ALL">Semua</option>
-            {CAKRA_GROUPS.map((c) => <option key={c}>{c}</option>)}
+            {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>
         </label>
         <label className="label">KU
@@ -161,7 +174,7 @@ export default async function AtletPage({
               <tr><th></th><th>Nama</th><th>Program</th><th>Cakra</th><th>KU</th><th>Kelompok</th><th>Status</th></tr>
             </thead>
             <tbody>
-              {rows.map((a) => (
+              {filteredRows.map((a) => (
                 <tr key={a.id}>
                   <td className="w-12 p-2">
                     {a.photo_url ? (
@@ -180,8 +193,7 @@ export default async function AtletPage({
                     {a.nickname && <span className="ml-1 text-slate-400">({a.nickname})</span>}
                     <p className="text-xs text-slate-400">{a.gender === "M" ? "Putra" : a.gender === "F" ? "Putri" : ""}{a.join_date ? ` • masuk ${a.join_date.slice(0, 4)}` : ""}</p>
                   </td>
-                  <td className="text-slate-600">{a.program ?? "—"}</td>
-                  <td className="text-slate-600">{a.cakra ?? "—"}</td>
+                  <td className="text-slate-600">{groupOf[a.id] || "—"}</td>
                   <td><span className="badge-info badge">{kuFromBirth(a.birth_date)}</span></td>
                   <td className="text-slate-600">{groupOf[a.id] || "—"}</td>
                   <td>

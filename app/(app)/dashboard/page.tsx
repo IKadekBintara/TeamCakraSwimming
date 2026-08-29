@@ -6,7 +6,7 @@ import GroupDistribution from "@/components/GroupDistribution";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { DAY_NAMES } from "@/types";
-import { rupiah, CAKRA_GROUPS } from "@/lib/events";
+import { rupiah, getCakraGroups } from "@/lib/events";
 import { normalizeCakra } from "@/lib/cakra";
 
 export const dynamic = "force-dynamic";
@@ -88,7 +88,9 @@ export default async function DashboardPage() {
     { data: currentProfile },
     { data: perfRows },
   ] = await Promise.all([
-    supabase.from("athletes").select("id, status, join_date, left_at, cakra"),
+    const { data: athletes } = await supabase.from("athletes").select("id, status, join_date, left_at");
+    const groups = await getCakraGroups();
+    const canonicalNames = groups.map(g => g.name);
     supabase
       .from("training_sessions")
       .select("id, session_date, start_time, end_time, location, group_id, training_groups(name)")
@@ -189,19 +191,30 @@ export default async function DashboardPage() {
     .select("id")
     .gte("session_date", monthStart);
   const monthSessionIds = (monthSessions ?? []).map((s) => s.id);
-  const attByCakra = new Map<string, { present: number; total: number }>();
+  // Att by kelompok (dari relasi training_group_members)
+  const attByGroup = new Map<string, { present: number; total: number }>();
   if (monthSessionIds.length > 0) {
     const { data: att } = await supabase
       .from("attendance")
       .select("athlete_id, status")
       .in("session_id", monthSessionIds);
-    const cakraOf = new Map(athletes.map((a) => [a.id, normalizeCakra(a.cakra)]));
+    // Ambil relasi kelompok untuk atlet yang hadir
+    const athleteIds = att?.map(a => a.athlete_id) ?? [];
+    const { data: memberships } = athleteIds.length
+      ? await supabase
+          .from("training_group_members")
+          .select("athlete_id, group_id")
+          .in("athlete_id", athleteIds)
+          .is("left_at", null)
+      : { data: [] as never[] };
+    const groupMap = Object.fromEntries(groups.map(g => [g.id, g.name]));
+    const groupOf = Object.fromEntries(memberships.map(m => [m.athlete_id, groupMap[m.group_id] || "Tidak tersedia"]));
     for (const a of att ?? []) {
-      const key = cakraOf.get(a.athlete_id) ?? "Tidak tersedia";
-      const cur = attByCakra.get(key) ?? { present: 0, total: 0 };
+      const key = groupOf[a.athlete_id] ?? "Tidak tersedia";
+      const cur = attByGroup.get(key) ?? { present: 0, total: 0 };
       cur.total += 1;
       if (a.status === "present") cur.present += 1;
-      attByCakra.set(key, cur);
+      attByGroup.set(key, cur);
     }
   }
 
@@ -224,7 +237,7 @@ export default async function DashboardPage() {
     current.remaining += Math.max(Number(payment.total_amount || 0) - Number(payment.amount_paid || 0), 0);
     cakraSummary.set(key, current);
   }
-  for (const [key, att] of Array.from(attByCakra.entries())) {
+  for (const [key, att] of Array.from(attByGroup.entries())) {
     const current = cakraSummary.get(key) ?? { athletes: 0, active: 0, registrations: 0, bills: 0, paid: 0, remaining: 0, attPresent: 0, attTotal: 0 };
     current.attPresent += att.present;
     current.attTotal += att.total;
@@ -232,7 +245,7 @@ export default async function DashboardPage() {
   }
   // Baris akhir: seluruh Cakra kanonik tampil (termasuk yang datanya 0), lalu
   // nilai non-kanonik apa pun di belakangnya — tanpa mengarang grup baru.
-  const canonicalOrder = [...CAKRA_GROUPS].sort((a, b) => a.localeCompare(b));
+  const canonicalOrder = [...canonicalNames].sort((a, b) => a.localeCompare(b));
   type CakraRow = { athletes: number; active: number; registrations: number; bills: number; paid: number; remaining: number; attPresent: number; attTotal: number };
   const emptyCakraRow: CakraRow = { athletes: 0, active: 0, registrations: 0, bills: 0, paid: 0, remaining: 0, attPresent: 0, attTotal: 0 };
   const cakraRows: [string, CakraRow][] = [

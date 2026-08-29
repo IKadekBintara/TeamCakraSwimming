@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { rupiah } from "@/lib/events";
-import { CAKRA_GROUPS } from "@/lib/events";
+import { getCakraGroups } from "@/lib/events";
 import { normalizeCakra } from "@/lib/cakra";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +34,7 @@ export default async function ReportsPage({
   const from = searchParams.from ?? `${now.getFullYear()}-01-01`;
   const to = searchParams.to ?? now.toISOString().slice(0, 10);
   const fEvent = searchParams.event ?? "ALL";
-  const fCakra = searchParams.cakra ?? "ALL";
+  const fGroup = searchParams.group ?? "ALL";
   const fKu = searchParams.ku ?? "ALL";
   const fPay = searchParams.pay ?? "ALL";
 
@@ -52,7 +52,7 @@ export default async function ReportsPage({
     .lte("created_at", `${to}T23:59:59`)
     .order("created_at", { ascending: false });
   if (fEvent !== "ALL") payQuery = payQuery.eq("event_id", fEvent);
-  if (fCakra !== "ALL") payQuery = payQuery.eq("cakra", fCakra);
+  // filter group akan dilakukan setelah fetch dengan relasi
   if (fKu !== "ALL") payQuery = payQuery.eq("ku", fKu);
   if (fPay !== "ALL") payQuery = payQuery.eq("payment_status", fPay);
   const { data: payRows } = await payQuery;
@@ -93,10 +93,17 @@ export default async function ReportsPage({
   }
 
   // ===== Cakra report (atlet ringkas) =====
-  const { data: athletes } = await supabase.from("athletes").select("cakra, status");
+  const { data: athletes } = await supabase.from("athletes").select("id, status");
+  // Ambil relasi kelompok untuk semua atlet
+  const { data: memberships } = await supabase
+    .from("training_group_members")
+    .select("athlete_id, group_id")
+    .is("left_at", null);
+  const groupMap = Object.fromEntries(groups.map(g => [g.id, g.name]));
+  const groupOf = Object.fromEntries(memberships.map(m => [m.athlete_id, groupMap[m.group_id] || "Tidak tersedia"]));
   const cakraStats = new Map<string, { total: number; active: number }>();
   for (const a of athletes ?? []) {
-    const key = normalizeCakra(a.cakra);
+    const key = groupOf[a.id] || "Tidak tersedia";
     const cur = cakraStats.get(key) ?? { total: 0, active: 0 };
     cur.total += 1;
     if (a.status === "ACTIVE") cur.active += 1;
@@ -120,7 +127,7 @@ export default async function ReportsPage({
       <label className="label">Cakra
         <select className="input" name="cakra" defaultValue={fCakra}>
           <option value="ALL">Semua</option>
-          {CAKRA_GROUPS.map((c) => <option key={c}>{c}</option>)}
+          {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
         </select>
       </label>
       <label className="label">KU
@@ -197,7 +204,7 @@ export default async function ReportsPage({
                     <td className="whitespace-nowrap text-slate-500">{String(p.created_at).slice(0, 10)}</td>
                     <td className="font-medium">{p.athlete_name}</td>
                     <td className="max-w-[160px] truncate">{(p.event as { name?: string } | null)?.name ?? "—"}</td>
-                    <td>{normalizeCakra(p.cakra)}</td>
+                    <td>{payGroupOf[p.athlete_id] || "—"}</td>
                     <td>{p.ku}</td>
                     <td className="whitespace-nowrap">{rupiah(p.total_amount)}</td>
                     <td className="whitespace-nowrap text-brand-700">{rupiah(p.amount_paid)}</td>
@@ -262,12 +269,13 @@ export default async function ReportsPage({
         <table className="table !min-w-[520px]">
           <thead><tr><th>Cakra</th><th>Total Atlet</th><th>Aktif</th><th>Tagihan Event</th><th>Masuk</th></tr></thead>
           <tbody>
-            {CAKRA_GROUPS.map((c) => {
+            {groups.map((g) => {
+              const c = g.name;
               const s = cakraStats.get(c) ?? { total: 0, active: 0 };
               const f = byCakra.get(c) ?? { billed: 0, paid: 0 };
               if (s.total === 0 && f.billed === 0) return null;
               return (
-                <tr key={c}>
+                <tr key={g.id}>
                   <td className="font-medium">{c}</td>
                   <td>{s.total}</td>
                   <td>{s.active}</td>

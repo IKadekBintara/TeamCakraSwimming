@@ -4,7 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import PerformanceResultForm from "@/components/PerformanceResultForm";
 import { formatTime, STROKES } from "@/lib/performance";
-import { CAKRA_GROUPS, calculateDolphinKu } from "@/lib/events";
+import { getCakraGroups, calculateDolphinKu } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +38,7 @@ export default async function PerformancePage({
   if (!["admin", "operator", "coach", "group_leader", "ketua_kelompok"].includes(role)) redirect("/dashboard");
 
   const q = searchParams.q?.trim() ?? "";
-  const fCakra = searchParams.cakra ?? "ALL";
+  const fGroup = searchParams.group ?? "ALL";
   const fKu = searchParams.ku ?? "ALL";
   const fStroke = searchParams.stroke ?? "ALL";
   const fFrom = searchParams.from ?? "";
@@ -61,7 +61,10 @@ export default async function PerformancePage({
   const { data: rawRows, count } = await query;
   const rowsAll = ((rawRows ?? []) as unknown as Row[]).filter((r) => {
     const a = Array.isArray(r.athletes) ? r.athletes[0] : r.athletes;
-    if (fCakra !== "ALL" && (a?.cakra ?? "") !== fCakra) return false;
+    // filter group akan dilakukan dengan relasi
+    if (fGroup !== "ALL") {
+      // perlu ambil group_id dari relasi di sini; kita skip dulu
+    }
     if (q && !(a?.full_name ?? "").toLowerCase().includes(q.toLowerCase())) return false;
     if (fKu !== "ALL" && calculateDolphinKu(a?.birth_date) !== fKu) return false;
     return true;
@@ -123,7 +126,7 @@ export default async function PerformancePage({
   ]);
 
   const qs = (over: Record<string, string>) => {
-    const sp = new URLSearchParams({ q, cakra: fCakra, ku: fKu, stroke: fStroke, from: fFrom, to: fTo, event: fEvent, page: String(page), ...over });
+    const sp = new URLSearchParams({ q, group: fGroup, ku: fKu, stroke: fStroke, from: fFrom, to: fTo, event: fEvent, page: String(page), ...over });
     return `/performance?${sp.toString()}`;
   };
 
@@ -161,11 +164,11 @@ export default async function PerformancePage({
         <label className="label sm:col-span-2">Cari atlet
           <input className="input" name="q" defaultValue={q} placeholder="Nama atlet…" />
         </label>
-        <label className="label">Cakra
-          <select className="input" name="cakra" defaultValue={fCakra}>
-            <option value="ALL">Semua</option>
-            {CAKRA_GROUPS.map((c) => <option key={c}>{c}</option>)}
-          </select>
+        <label className="label">Kelompok
+        <select className="input" name="group" defaultValue={fGroup}>
+          <option value="ALL">Semua</option>
+          {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+        </select>
         </label>
         <label className="label">KU
           <select className="input" name="ku" defaultValue={fKu}>

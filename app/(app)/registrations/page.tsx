@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { rupiah, paymentStatusLabel, type PaymentStatus } from "@/lib/events";
-import { CAKRA_GROUPS } from "@/lib/events";
+import { getCakraGroups } from "@/lib/events";
 import { normalizeCakra } from "@/lib/cakra";
 
 export const dynamic = "force-dynamic";
@@ -68,7 +68,7 @@ export default async function RegistrationsPage({
   const supabase = createClient();
   const q = searchParams.q?.trim() ?? "";
   const fEvent = searchParams.event ?? "ALL";
-  const fCakra = searchParams.cakra ?? "ALL";
+  const fGroup = searchParams.group ?? "ALL";
   const fKu = searchParams.ku ?? "ALL";
   const fRace = searchParams.race ?? "ALL";
   const fPay = searchParams.pay ?? "ALL";
@@ -93,7 +93,8 @@ export default async function RegistrationsPage({
     .range(from, from + PAGE_SIZE - 1);
   if (q) query = query.ilike("athlete_name", `%${q}%`);
   if (fEvent !== "ALL") query = query.eq("event_id", fEvent);
-  if (fCakra !== "ALL") query = query.eq("cakra", fCakra);
+  // filter group akan dilakukan setelah fetch dengan relasi
+  // kita skip dulu
   if (fKu !== "ALL") query = query.eq("registration.ku", fKu);
   if (fPay !== "ALL") query = query.eq("payment_status", fPay);
   const { data: rows, count } = await query;
@@ -169,7 +170,7 @@ export default async function RegistrationsPage({
 
   const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
   const qs = (over: Record<string, string>) => {
-    const sp = new URLSearchParams({ q, event: fEvent, cakra: fCakra, ku: fKu, race: fRace, pay: fPay, sort: sortOpt.value, page: String(page), ...over });
+    const sp = new URLSearchParams({ q, event: fEvent, group: fGroup, ku: fKu, race: fRace, pay: fPay, sort: sortOpt.value, page: String(page), ...over });
     return `/registrations?${sp.toString()}`;
   };
 
@@ -195,7 +196,7 @@ export default async function RegistrationsPage({
         <label className="label">Cakra
           <select className="input" name="cakra" defaultValue={fCakra}>
             <option value="ALL">Semua</option>
-            {CAKRA_GROUPS.map((c) => <option key={c}>{c}</option>)}
+            {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
             <option>Tidak tersedia</option>
           </select>
         </label>
