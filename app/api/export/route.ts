@@ -291,7 +291,7 @@ export async function GET(req: NextRequest) {
       "ID Transaksi": p.transaction_id,
       "ID Atlet": p.athlete_id,
       "Nama": p.athlete_name,
-      "Cakra": normalizeCakra(p.cakra),
+      "Cakra": normalizeCakra(p.cakra, []),
       "Event": (p.events as { name?: string } | null)?.name ?? "",
       "Jumlah Nomor": p.jumlah_nomor,
       "Uang Pendaftaran": p.registration_fee,

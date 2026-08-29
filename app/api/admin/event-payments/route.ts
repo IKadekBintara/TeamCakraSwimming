@@ -29,6 +29,60 @@ function fail(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
 }
 
+type ServiceClient = ReturnType<typeof createServiceClient>;
+
+/**
+ * Hapus registration dari event beserta seluruh child record yang bergantung padanya.
+ * Urutan wajib karena FK RESTRICT: entries -> payments -> registration.
+ * Tabel athletes TIDAK disentuh — atlet tetap utuh dan dapat didaftarkan kembali.
+ */
+async function removeFromEvent(service: ServiceClient, actorId: string, registrationId: string) {
+  const { data: reg, error: regError } = await service
+    .from("event_registrations")
+    .select("id, event_id, athlete_id, ku, status, athletes(full_name)")
+    .eq("id", registrationId)
+    .maybeSingle();
+  if (regError) return fail("Gagal membaca data pendaftaran.", 500);
+  if (!reg) return fail("Pendaftaran tidak ditemukan (mungkin sudah dihilangkan).", 404);
+
+  const athleteName = (reg.athletes as { full_name?: string } | null)?.full_name ?? "—";
+
+  const [{ data: entries }, { data: pays }] = await Promise.all([
+    service.from("event_registration_entries").select("id, race_id").eq("registration_id", registrationId),
+    service.from("event_payments").select("id, payment_status, total_amount").eq("registration_id", registrationId),
+  ]);
+
+  // Pelindung data uang: pembayaran LUNAS/DP tidak boleh terhapus diam-diam.
+  if ((pays ?? []).some((p) => p.payment_status === "LUNAS" || p.payment_status === "DP"))
+    return fail("Pendaftaran ini memiliki pembayaran tercatat (LUNAS/DP). Batalkan pendaftaran dan tindak lanjut pembayarannya terlebih dahulu.", 409);
+
+  const { error: delEntriesError } = await service.from("event_registration_entries").delete().eq("registration_id", registrationId);
+  if (delEntriesError) return fail("Gagal menghapus nomor lomba pendaftaran. Tidak ada data yang dihapus.", 500);
+
+  const { error: delPaysError } = await service.from("event_payments").delete().eq("registration_id", registrationId);
+  if (delPaysError) return fail("Gagal menghapus tagihan pendaftaran. Nomor lomba sudah terhapus, periksa sisa data di database.", 500);
+
+  const { error: delRegError } = await service.from("event_registrations").delete().eq("id", registrationId);
+  if (delRegError) return fail("Gagal menghapus pendaftaran.", 500);
+
+  const { error: auditError } = await service.from("audit_logs").insert({
+    actor_id: actorId,
+    action: "REMOVE_FROM_EVENT",
+    entity: "event_registrations",
+    entity_id: registrationId,
+    old_value: {
+      registration: { id: reg.id, event_id: reg.event_id, athlete_id: reg.athlete_id, ku: reg.ku, status: reg.status },
+      athlete_name: athleteName,
+      entries: entries ?? [],
+      payments: pays ?? [],
+    },
+    new_value: { athlete_id: reg.athlete_id, event_id: reg.event_id, athlete_deleted: false },
+  });
+  if (auditError) console.error("[event-payments] audit log gagal:", auditError.message);
+
+  return NextResponse.json({ ok: true, removed: { registration_id: registrationId, athlete_id: reg.athlete_id } });
+}
+
 export async function PATCH(request: NextRequest) {
   const rl = rateLimit(request, "event-payments-patch", 30);
   if (rl) return rl;
@@ -46,12 +100,21 @@ export async function PATCH(request: NextRequest) {
   }
 
   const paymentId = String(body.payment_id ?? "");
+  const registrationId = String(body.registration_id ?? "");
   const action = String(body.action ?? "");
   const expectedStatus = body.expected_status ? String(body.expected_status) : null;
-  if (!UUID_RE.test(paymentId)) return fail("payment_id tidak valid.", 400);
-  if (!["verify", "reject", "set_status", "cancel"].includes(action)) return fail("Aksi tidak dikenal.", 400);
 
   const service = createServiceClient();
+
+  // "Hilangkan dari Event": hapus permanen registration + child records (entries, payments)
+  // dari event ini. Data atlet utama (tabel athletes) TIDAK disentuh.
+  if (action === "remove_from_event") {
+    if (!UUID_RE.test(registrationId)) return fail("registration_id tidak valid.", 400);
+    return removeFromEvent(service, ctx.userId, registrationId);
+  }
+
+  if (!UUID_RE.test(paymentId)) return fail("payment_id tidak valid.", 400);
+  if (!["verify", "reject", "set_status", "cancel"].includes(action)) return fail("Aksi tidak dikenal.", 400);
 
   // Baca state TERKINI sebelum menulis (proteksi concurrency + anti-duplicate).
   const { data: pay, error: payError } = await service.from("event_payments").select("*").eq("id", paymentId).maybeSingle();
@@ -82,10 +145,13 @@ export async function PATCH(request: NextRequest) {
     patch.verified_at = nowIso;
   } else if (action === "cancel") {
     patch.payment_status = "CANCELLED";
-    // Resolusi registrasi: registration_id langsung, fallback via event_registrations.payment_id
+    // Resolusi registrasi: registration_id langsung; fallback cari registrasi AKTIF atlet+event.
     let regId = (pay.registration_id as string | null) || null;
     if (!regId) {
-      const { data: reg } = await service.from("event_registrations").select("id").eq("payment_id", pay.id).limit(1).maybeSingle();
+      // Kolom event_registrations.payment_id TIDAK ADA di schema — cari registrasi AKTIF atlet+event.
+      const { data: reg } = await service.from("event_registrations").select("id")
+        .eq("athlete_id", pay.athlete_id).eq("event_id", pay.event_id).eq("status", "REGISTERED")
+        .limit(1).maybeSingle();
       regId = reg?.id ?? null;
     }
     if (regId) {

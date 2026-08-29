@@ -132,11 +132,37 @@ export default function EventPaymentsManager({ rows, eventName, eventId, canMana
     void mutate({ payment_id: row.pay.id, action: "cancel", expected_status: row.pay.status }, `Pendaftaran ${row.athlete} dibatalkan.`);
   }
 
+  async function removeFromEvent(row: PayRow) {
+    if (!window.confirm(`Hapus atlet ini dari event? Data atlet utama tetap aman dan dapat didaftarkan kembali.`)) return;
+    setBusy(true); setError(null);
+    try {
+      const res = await fetch("/api/admin/event-payments", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "remove_from_event", registration_id: row.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data.error || "Gagal menghilangkan pendaftaran dari event."); return; }
+      setToast(`${row.athlete} dihilangkan dari ${eventName}. Atlet tetap aman di daftar utama.`);
+      setModal(null);
+      router.refresh();
+    } catch {
+      setError("Tidak dapat menghubungi server. Periksa koneksi lalu coba lagi.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const actionsCell = (row: PayRow) => {
     if (!canManage) return <span className="text-xs text-slate-400">—</span>;
     if (!row.pay) return <span className="text-xs text-slate-400">Tidak ada tagihan</span>;
     if (row.regStatus === "CANCELLED" || row.pay.status === "CANCELLED")
-      return <button className="btn-secondary text-xs" onClick={() => setModal({ mode: "detail", row })}>Detail</button>;
+      return (
+        <div className="flex flex-wrap gap-1.5">
+          <button className="btn-secondary text-xs" onClick={() => setModal({ mode: "detail", row })}>Detail</button>
+          <button disabled={busy} className="text-xs text-red-600 hover:underline" onClick={() => removeFromEvent(row)}>Hilangkan dari Event</button>
+        </div>
+      );
     const st = row.pay.status;
     return (
       <div className="flex flex-wrap gap-1.5">

@@ -1,20 +1,5 @@
 import type { Athlete } from "@/types";
 
-import { createClient } from "@/lib/supabase/server";
-
-export async function getCakraGroups() {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("training_groups")
-    .select("id, name")
-    .order("name");
-  if (error) {
-    console.error("Failed to fetch groups:", error);
-    return [];
-  }
-  return data;
-}
-
 export type EventStatus = "DRAFT" | "OPEN" | "CLOSED" | "CANCELLED";
 export type PaymentStatus = "BELUM_BAYAR" | "MENUNGGU_VERIFIKASI" | "DP" | "LUNAS" | "DITOLAK" | "CANCELLED";
 

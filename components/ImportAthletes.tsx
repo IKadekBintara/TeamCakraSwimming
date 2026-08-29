@@ -140,7 +140,7 @@ export default function ImportAthletes() {
           whatsapp: r.whatsapp ? normalizeWhatsapp(r.whatsapp) : null,
           address: r.address,
           program: r.program,
-          cakra: r.cakra ? normalizeCakra(r.cakra) : null,
+          cakra: r.cakra ? normalizeCakra(r.cakra, []) : null,
           group_id: r.group_name
             ? groupMap.get(r.group_name.toLowerCase())
               ?? groupMap.get(r.group_name.toLowerCase().replace(/^team\s+/, ""))

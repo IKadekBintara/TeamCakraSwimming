@@ -41,7 +41,7 @@ export default function EventRegistrationForm({ event, races, athletes, canManag
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setError("Sesi login berakhir."); setSaving(false); return; }
     const { data: registrationId, error: registrationError } = await supabase.rpc("create_event_registration", { p_event_id: event.id, p_athlete_id: athlete.id, p_ku: ku, p_ku_override: kuOverride || null, p_race_ids: selected, p_amount_paid: paid, p_payment_method: canManage ? paymentMethod || "Dibayar melalui admin" : null, p_payment_status: canManage ? adminPaymentStatus : "BELUM_BAYAR" });
-    if (registrationError) { setError(registrationError.code === "23505" || registrationError.message.includes("sudah memiliki pendaftaran") ? "Atlet sudah memiliki pendaftaran pada event ini." : registrationError.message); setSaving(false); return; }
+    if (registrationError) { setError(registrationError.message.includes("masih terdaftar") || registrationError.code === "23505" || registrationError.message.includes("sudah memiliki pendaftaran") ? "Atlet masih terdaftar aktif pada event ini." : registrationError.message); setSaving(false); return; }
     if (!registrationId) { setError("Pendaftaran gagal dibuat."); setSaving(false); return; }
     router.refresh(); setAthleteId(""); setSelected([]); setKuOverride(""); setAmountPaid("0"); setPaymentMethod(""); setAdminPaymentStatus("BELUM_BAYAR"); setSaving(false);
   }

@@ -2,7 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { STATUS_LABELS } from "@/types";
-import { getCakraGroups, calculateDolphinKu } from "@/lib/events";
+import { calculateDolphinKu } from "@/lib/events";
+import { getCakraGroups } from "@/lib/groups";
 import { getProfile } from "@/lib/page-guard";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,7 @@ const PAGE_SIZE = 25;
 export default async function AtletPage({
   searchParams,
 }: {
-  searchParams: { q?: string; status?: string; cakra?: string; ku?: string; sort?: string; page?: string };
+  searchParams: { q?: string; status?: string; group?: string; ku?: string; sort?: string; page?: string };
 }) {
   // Atlet/parent tidak melihat daftar seluruh atlet — diarahkan ke halaman pribadi.
   const viewer = await getProfile();

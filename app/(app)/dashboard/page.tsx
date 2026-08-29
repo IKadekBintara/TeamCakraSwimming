@@ -6,8 +6,8 @@ import GroupDistribution from "@/components/GroupDistribution";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { DAY_NAMES } from "@/types";
-import { rupiah, getCakraGroups } from "@/lib/events";
-import { normalizeCakra } from "@/lib/cakra";
+import { rupiah } from "@/lib/events";
+import { getCakraGroups } from "@/lib/groups";
 
 export const dynamic = "force-dynamic";
 
@@ -76,10 +76,11 @@ export default async function DashboardPage() {
   const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
   const yearStart = `${now.getFullYear()}-01-01`;
 
+  const { data: allAthletes } = await supabase.from("athletes").select("id, status, join_date, left_at");
+  const groups = await getCakraGroups();
+  const canonicalNames = groups.map((g) => g.name);
   const [
-    { data: allAthletes },
     { data: todaySessions },
-    { data: groups },
     { data: members },
     { data: allEvents },
     { data: eventPayments },
@@ -88,17 +89,13 @@ export default async function DashboardPage() {
     { data: currentProfile },
     { data: perfRows },
   ] = await Promise.all([
-    const { data: athletes } = await supabase.from("athletes").select("id, status, join_date, left_at");
-    const groups = await getCakraGroups();
-    const canonicalNames = groups.map(g => g.name);
     supabase
       .from("training_sessions")
       .select("id, session_date, start_time, end_time, location, group_id, training_groups(name)")
       .eq("session_date", today),
-    supabase.from("training_groups").select("id, name, is_active").eq("is_active", true),
     supabase.from("training_group_members").select("group_id, athlete_id").is("left_at", null),
     supabase.from("events").select("id, name, status, event_date, location, registration_deadline").order("event_date", { ascending: false }),
-    supabase.from("event_payments").select("event_id, cakra, registration_fee, admin_fee, total_amount, amount_paid, payment_status"),
+    supabase.from("event_payments").select("event_id, athlete_id, registration_fee, admin_fee, total_amount, amount_paid, payment_status"),
     supabase.from("event_registrations").select("id, event_id"),
     supabase.from("audit_logs").select("id, action, entity, created_at, profiles(full_name)").order("created_at", { ascending: false }).limit(8),
     supabase.from("profiles").select("role, full_name").eq("id", ((await getAuth()).user?.id ?? "")).maybeSingle(),
@@ -208,7 +205,7 @@ export default async function DashboardPage() {
           .is("left_at", null)
       : { data: [] as never[] };
     const groupMap = Object.fromEntries(groups.map(g => [g.id, g.name]));
-    const groupOf = Object.fromEntries(memberships.map(m => [m.athlete_id, groupMap[m.group_id] || "Tidak tersedia"]));
+    const groupOf = Object.fromEntries((memberships ?? []).map((m) => [m.athlete_id as string, groupMap[m.group_id as string] || "Tidak tersedia"]));
     for (const a of att ?? []) {
       const key = groupOf[a.athlete_id] ?? "Tidak tersedia";
       const cur = attByGroup.get(key) ?? { present: 0, total: 0 };
@@ -218,10 +215,17 @@ export default async function DashboardPage() {
     }
   }
 
-  // ===== Rekap per Cakra =====
+  // ===== Rekap per Kelompok (satu sumber kebenaran: training_group_members) =====
+  const groupGidOf = new Map<string, string>();
+  for (const m of members ?? []) groupGidOf.set(m.athlete_id as string, m.group_id as string);
+  const groupNameOfId = (athleteId: string | null | undefined): string => {
+    if (!athleteId) return "BELUM DIATUR";
+    const gid = groupGidOf.get(athleteId);
+    return gid ? (groups.find((g) => g.id === gid)?.name ?? "BELUM DIATUR") : "BELUM DIATUR";
+  };
   const cakraSummary = new Map<string, { athletes: number; active: number; registrations: number; bills: number; paid: number; remaining: number; attPresent: number; attTotal: number }>();
   for (const athlete of athletes) {
-    const key = normalizeCakra(athlete.cakra);
+    const key = groupNameOfId(athlete.id);
     const current = cakraSummary.get(key) ?? { athletes: 0, active: 0, registrations: 0, bills: 0, paid: 0, remaining: 0, attPresent: 0, attTotal: 0 };
     current.athletes += 1;
     if (athlete.status === "ACTIVE") current.active += 1;
@@ -229,7 +233,7 @@ export default async function DashboardPage() {
   }
   for (const payment of payments) {
     if (payment.payment_status === "CANCELLED") continue;
-    const key = normalizeCakra(payment.cakra);
+    const key = groupNameOfId(payment.athlete_id as string);
     const current = cakraSummary.get(key) ?? { athletes: 0, active: 0, registrations: 0, bills: 0, paid: 0, remaining: 0, attPresent: 0, attTotal: 0 };
     current.registrations += 1;
     current.bills += Number(payment.total_amount || 0);
@@ -574,7 +578,7 @@ export default async function DashboardPage() {
           const byCakraPerf = new Map<string, { athletes: Set<string>; results: number; improved: number }>();
           for (const r of perf) {
             const a = Array.isArray(r.athletes) ? r.athletes[0] : r.athletes;
-            const ck = normalizeCakra(a?.cakra);
+            const ck = groupNameOfId(r.athlete_id);
             const cur = byCakraPerf.get(ck) ?? { athletes: new Set<string>(), results: 0, improved: 0 };
             cur.results += 1;
             cur.athletes.add(r.athlete_id);
@@ -603,7 +607,7 @@ export default async function DashboardPage() {
                         let improvements = 0;
                         for (const r of perf) {
                           const a = Array.isArray(r.athletes) ? r.athletes[0] : r.athletes;
-                          if (normalizeCakra(a?.cakra) !== name) continue;
+                          if (groupNameOfId(r.athlete_id) !== name) continue;
                           if (r.time_cs == null) continue;
                           const k = `${r.athlete_id}|${r.stroke}|${r.distance}`;
                           const prev = perAthleteBest.get(k);

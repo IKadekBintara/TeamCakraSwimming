@@ -1,8 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { rupiah } from "@/lib/events";
-import { getCakraGroups } from "@/lib/events";
-import { normalizeCakra } from "@/lib/cakra";
+import { getCakraGroups } from "@/lib/groups";
 
 export const dynamic = "force-dynamic";
 
@@ -11,12 +10,12 @@ const EXPORT_BASE = "/api/export";
 type ReportKey = "athlete" | "attendance" | "registration" | "payment" | "financial" | "cakra";
 
 const REPORTS: { key: ReportKey; title: string; desc: string; href: string }[] = [
-  { key: "athlete", title: "Athlete Report", desc: "Data atlet: Cakra, KU, status, program.", href: "/atlet" },
+  { key: "athlete", title: "Athlete Report", desc: "Data atlet: Kelompok, KU, status, program.", href: "/atlet" },
   { key: "attendance", title: "Attendance Report", desc: "Rekap kehadiran per periode + export Excel existing.", href: "/laporan" },
   { key: "registration", title: "Event Registration Report", desc: "Semua pendaftaran event + status pembayaran.", href: "/registrations" },
   { key: "payment", title: "Payment Report", desc: "Transaksi pembayaran event per periode.", href: "#payment" },
-  { key: "financial", title: "Financial Report", desc: "Pendapatan, outstanding, DP per event & per Cakra.", href: "#financial" },
-  { key: "cakra", title: "Cakra Report", desc: "Ringkasan atlet & keuangan per Cakra.", href: "#cakra" },
+  { key: "financial", title: "Financial Report", desc: "Pendapatan, outstanding, DP per event & per kelompok.", href: "#financial" },
+  { key: "cakra", title: "Cakra Report", desc: "Ringkasan atlet & keuangan per kelompok/Cakra.", href: "#cakra" },
 ];
 
 function qs(base: string, params: Record<string, string>) {
@@ -27,7 +26,7 @@ function qs(base: string, params: Record<string, string>) {
 export default async function ReportsPage({
   searchParams,
 }: {
-  searchParams: { from?: string; to?: string; event?: string; cakra?: string; ku?: string; pay?: string };
+  searchParams: { from?: string; to?: string; event?: string; group?: string; ku?: string; pay?: string };
 }) {
   const supabase = createClient();
   const now = new Date();
@@ -35,28 +34,39 @@ export default async function ReportsPage({
   const to = searchParams.to ?? now.toISOString().slice(0, 10);
   const fEvent = searchParams.event ?? "ALL";
   const fGroup = searchParams.group ?? "ALL";
-  const fKu = searchParams.ku ?? "ALL";
   const fPay = searchParams.pay ?? "ALL";
 
-  const [{ data: events }, { data: kus }] = await Promise.all([
+  const [{ data: events }, { data: athletes }, { data: memberships }, groupsR] = await Promise.all([
     supabase.from("events").select("id, name").order("event_date", { ascending: false }),
-    supabase.from("event_registrations").select("ku").order("ku"),
+    supabase.from("athletes").select("id, status"),
+    supabase.from("training_group_members").select("athlete_id, group_id").is("left_at", null),
+    getCakraGroups(),
   ]);
-  const kuOptions = Array.from(new Set((kus ?? []).map((k) => k.ku))).filter(Boolean).sort();
+  const groups = groupsR ?? [];
+
+  // Peta kelompok: athlete_id → {id, nama}. Satu sumber kebenaran: training_group_members.
+  const groupNameById = new Map(groups.map((g) => [g.id, g.name]));
+  const groupGidOf = new Map<string, string>();
+  const groupOf = new Map<string, string>();
+  for (const m of memberships ?? []) {
+    groupGidOf.set(m.athlete_id, m.group_id);
+    groupOf.set(m.athlete_id, groupNameById.get(m.group_id) ?? "Tidak tersedia");
+  }
 
   // ===== Payment report rows (dengan filter) =====
+  // KU hidup di event_registrations — diambil via relasi (kolom ku TIDAK ada di event_payments).
   let payQuery = supabase
     .from("event_payments")
-    .select("transaction_id, athlete_name, cakra, ku, registration_fee, admin_fee, total_amount, amount_paid, remaining_amount, payment_status, created_at, event:events(name)")
+    .select("transaction_id, athlete_id, athlete_name, registration_fee, admin_fee, total_amount, amount_paid, remaining_amount, payment_status, created_at, event:events(name), registration:event_registrations(ku)")
     .gte("created_at", `${from}T00:00:00`)
     .lte("created_at", `${to}T23:59:59`)
     .order("created_at", { ascending: false });
   if (fEvent !== "ALL") payQuery = payQuery.eq("event_id", fEvent);
-  // filter group akan dilakukan setelah fetch dengan relasi
-  if (fKu !== "ALL") payQuery = payQuery.eq("ku", fKu);
   if (fPay !== "ALL") payQuery = payQuery.eq("payment_status", fPay);
-  const { data: payRows } = await payQuery;
-  const payments = payRows ?? [];
+  let payments = (await payQuery).data ?? [];
+
+  // Filter kelompok via relasi membership (bukan kolom cakra legacy).
+  if (fGroup !== "ALL") payments = payments.filter((p) => groupGidOf.get(p.athlete_id as string) === fGroup);
 
   // ===== Financial aggregation =====
   const sum = (arr: typeof payments, fn: (p: (typeof payments)[number]) => number) => arr.reduce((n, p) => n + fn(p), 0);
@@ -66,14 +76,15 @@ export default async function ReportsPage({
   // Pemisahan komponen: UANG EVENT (pendapatan event) ≠ UANG ADMIN.
   const totalBilledEvent = sum(valid, (p) => Number(p.registration_fee || 0));
   const totalRevenueEvent = sum(payments.filter((p) => ["LUNAS", "DP"].includes(p.payment_status)), (p) => Number(p.registration_fee || 0));
+  const totalAdminRevenue = sum(payments.filter((p) => ["LUNAS", "DP"].includes(p.payment_status)), (p) => Number(p.admin_fee || 0));
   const totalOutstanding =
     sum(valid.filter((p) => p.payment_status === "BELUM_BAYAR"), (p) => Number(p.total_amount || 0)) +
     sum(valid.filter((p) => p.payment_status === "DP"), (p) => Math.max(Number(p.total_amount || 0) - Number(p.amount_paid || 0), 0));
   const dpCount = payments.filter((p) => p.payment_status === "DP").length;
 
-  // Per event / per cakra / per tanggal
+  // Per event / per kelompok / per tanggal
   const byEvent = new Map<string, { billed: number; paid: number }>();
-  const byCakra = new Map<string, { billed: number; paid: number }>();
+  const byGroup = new Map<string, { billed: number; paid: number }>();
   const byDate = new Map<string, number>();
   for (const p of valid) {
     const evName = (p.event as { name?: string } | null)?.name ?? "Tanpa Event";
@@ -82,32 +93,24 @@ export default async function ReportsPage({
     if (["LUNAS", "DP"].includes(p.payment_status)) ev.paid += Number(p.amount_paid || 0);
     byEvent.set(evName, ev);
 
-    const ck = normalizeCakra(p.cakra);
-    const cv = byCakra.get(ck) ?? { billed: 0, paid: 0 };
+    const ck = groupOf.get(p.athlete_id as string) ?? "BELUM DIATUR";
+    const cv = byGroup.get(ck) ?? { billed: 0, paid: 0 };
     cv.billed += Number(p.total_amount || 0);
     if (["LUNAS", "DP"].includes(p.payment_status)) cv.paid += Number(p.amount_paid || 0);
-    byCakra.set(ck, cv);
+    byGroup.set(ck, cv);
 
     const d = String(p.created_at).slice(0, 10);
     if (["LUNAS", "DP"].includes(p.payment_status)) byDate.set(d, (byDate.get(d) ?? 0) + Number(p.amount_paid || 0));
   }
 
   // ===== Cakra report (atlet ringkas) =====
-  const { data: athletes } = await supabase.from("athletes").select("id, status");
-  // Ambil relasi kelompok untuk semua atlet
-  const { data: memberships } = await supabase
-    .from("training_group_members")
-    .select("athlete_id, group_id")
-    .is("left_at", null);
-  const groupMap = Object.fromEntries(groups.map(g => [g.id, g.name]));
-  const groupOf = Object.fromEntries(memberships.map(m => [m.athlete_id, groupMap[m.group_id] || "Tidak tersedia"]));
-  const cakraStats = new Map<string, { total: number; active: number }>();
+  const groupStats = new Map<string, { total: number; active: number }>();
   for (const a of athletes ?? []) {
-    const key = groupOf[a.id] || "Tidak tersedia";
-    const cur = cakraStats.get(key) ?? { total: 0, active: 0 };
+    const key = groupOf.get(a.id) ?? "BELUM DIATUR";
+    const cur = groupStats.get(key) ?? { total: 0, active: 0 };
     cur.total += 1;
     if (a.status === "ACTIVE") cur.active += 1;
-    cakraStats.set(key, cur);
+    groupStats.set(key, cur);
   }
 
   const filterForm = (
@@ -124,16 +127,10 @@ export default async function ReportsPage({
           {(events ?? []).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
         </select>
       </label>
-      <label className="label">Cakra
-        <select className="input" name="cakra" defaultValue={fCakra}>
+      <label className="label">Kelompok
+        <select className="input" name="group" defaultValue={fGroup}>
           <option value="ALL">Semua</option>
           {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-        </select>
-      </label>
-      <label className="label">KU
-        <select className="input" name="ku" defaultValue={fKu}>
-          <option value="ALL">Semua</option>
-          {kuOptions.map((k) => <option key={k}>{k}</option>)}
         </select>
       </label>
       <label className="label">Status Bayar
@@ -197,15 +194,15 @@ export default async function ReportsPage({
         ) : (
           <div className="table-wrap">
             <table className="table !min-w-[820px]">
-              <thead><tr><th>Tanggal</th><th>Atlet</th><th>Event</th><th>Cakra</th><th>KU</th><th>Total</th><th>Dibayar</th><th>Status</th></tr></thead>
+              <thead><tr><th>Tanggal</th><th>Atlet</th><th>Event</th><th>Kelompok</th><th>KU</th><th>Total</th><th>Dibayar</th><th>Status</th></tr></thead>
               <tbody>
                 {payments.slice(0, 50).map((p) => (
                   <tr key={p.transaction_id}>
                     <td className="whitespace-nowrap text-slate-500">{String(p.created_at).slice(0, 10)}</td>
                     <td className="font-medium">{p.athlete_name}</td>
                     <td className="max-w-[160px] truncate">{(p.event as { name?: string } | null)?.name ?? "—"}</td>
-                    <td>{payGroupOf[p.athlete_id] || "—"}</td>
-                    <td>{p.ku}</td>
+                    <td>{groupOf.get(p.athlete_id as string) ?? "BELUM DIATUR"}</td>
+                    <td>{(p.registration as { ku?: string } | null)?.ku ?? "—"}</td>
                     <td className="whitespace-nowrap">{rupiah(p.total_amount)}</td>
                     <td className="whitespace-nowrap text-brand-700">{rupiah(p.amount_paid)}</td>
                     <td>{p.payment_status}</td>
@@ -223,8 +220,9 @@ export default async function ReportsPage({
         <div className="card-flat">
           <h3 className="card-title mb-3">Financial Summary</h3>
           <dl className="space-y-2 text-sm">
-            <div className="flex justify-between"><dt className="text-slate-600">Total Registration Revenue</dt><dd className="font-semibold">{rupiah(totalRevenue)}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-600">Total Pembayaran Masuk</dt><dd className="font-semibold">{rupiah(totalRevenue)}</dd></div>
             <div className="flex justify-between"><dt className="text-slate-600">— Uang Event (pendapatan event)</dt><dd className="font-semibold text-brand-700">{rupiah(totalRevenueEvent)}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-600">— Uang Admin</dt><dd className="font-semibold text-brand-700">{rupiah(totalAdminRevenue)}</dd></div>
             <div className="flex justify-between"><dt className="text-slate-600">Total Tagihan (event + admin)</dt><dd className="font-semibold">{rupiah(totalBilled)}</dd></div>
             <div className="flex justify-between"><dt className="text-slate-600">— Uang Event (billed)</dt><dd className="font-semibold text-brand-700">{rupiah(totalBilledEvent)}</dd></div>
             <div className="flex justify-between"><dt className="text-slate-600">Outstanding</dt><dd className="font-semibold text-red-600">{rupiah(totalOutstanding)}</dd></div>
@@ -232,15 +230,15 @@ export default async function ReportsPage({
           </dl>
         </div>
         <div className="card-flat overflow-x-auto lg:col-span-2">
-          <h3 className="card-title mb-3">Per Event / Per Cakra</h3>
+          <h3 className="card-title mb-3">Per Event / Per Kelompok</h3>
           <table className="table !min-w-[480px]">
             <thead><tr><th>Kelompok</th><th>Tagihan</th><th>Masuk</th></tr></thead>
             <tbody>
               {Array.from(byEvent.entries()).slice(0, 8).map(([name, v]) => (
                 <tr key={`e-${name}`}><td>🏁 {name}</td><td className="whitespace-nowrap">{rupiah(v.billed)}</td><td className="whitespace-nowrap text-brand-700">{rupiah(v.paid)}</td></tr>
               ))}
-              {Array.from(byCakra.entries()).map(([name, v]) => (
-                <tr key={`c-${name}`}><td>{name}</td><td className="whitespace-nowrap">{rupiah(v.billed)}</td><td className="whitespace-nowrap text-brand-700">{rupiah(v.paid)}</td></tr>
+              {Array.from(byGroup.entries()).map(([name, v]) => (
+                <tr key={`g-${name}`}><td>{name}</td><td className="whitespace-nowrap">{rupiah(v.billed)}</td><td className="whitespace-nowrap text-brand-700">{rupiah(v.paid)}</td></tr>
               ))}
             </tbody>
           </table>
@@ -265,14 +263,14 @@ export default async function ReportsPage({
 
       {/* Cakra report */}
       <section id="cakra" className="card-flat overflow-x-auto">
-        <h3 className="card-title mb-3">Cakra Report</h3>
+        <h3 className="card-title mb-3">Cakra Report (per kelompok)</h3>
         <table className="table !min-w-[520px]">
-          <thead><tr><th>Cakra</th><th>Total Atlet</th><th>Aktif</th><th>Tagihan Event</th><th>Masuk</th></tr></thead>
+          <thead><tr><th>Kelompok</th><th>Total Atlet</th><th>Aktif</th><th>Tagihan Event</th><th>Masuk</th></tr></thead>
           <tbody>
             {groups.map((g) => {
               const c = g.name;
-              const s = cakraStats.get(c) ?? { total: 0, active: 0 };
-              const f = byCakra.get(c) ?? { billed: 0, paid: 0 };
+              const s = groupStats.get(c) ?? { total: 0, active: 0 };
+              const f = byGroup.get(c) ?? { billed: 0, paid: 0 };
               if (s.total === 0 && f.billed === 0) return null;
               return (
                 <tr key={g.id}>

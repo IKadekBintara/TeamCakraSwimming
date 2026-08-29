@@ -4,7 +4,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import PerformanceResultForm from "@/components/PerformanceResultForm";
 import { formatTime, STROKES } from "@/lib/performance";
-import { getCakraGroups, calculateDolphinKu } from "@/lib/events";
+import { calculateDolphinKu } from "@/lib/events";
+import { getCakraGroups } from "@/lib/groups";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ type Row = {
 export default async function PerformancePage({
   searchParams,
 }: {
-  searchParams: { q?: string; cakra?: string; ku?: string; stroke?: string; from?: string; to?: string; event?: string; page?: string; edit?: string };
+  searchParams: { q?: string; group?: string; ku?: string; stroke?: string; from?: string; to?: string; event?: string; page?: string; edit?: string };
 }) {
   const supabase = createClient();
   const { user } = await getAuth();
@@ -46,6 +47,7 @@ export default async function PerformancePage({
   const fEvent = searchParams.event ?? "ALL";
   const page = Math.max(1, Number(searchParams.page || 1));
   const rngFrom = (page - 1) * PAGE_SIZE;
+  const groups = await getCakraGroups();
 
   let query = supabase
     .from("athlete_performance_results")
