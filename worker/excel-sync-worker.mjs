@@ -324,6 +324,7 @@ async function upsertRegistration(cfg, state, dryRun = false) {
   const key = normKey(state.name);
   let existing = null;
   let resolvedBy = "name";
+  let staleOwnerRow = null; // baris yang ditemukan via nama tapi mappingnya milik registrasi terhapus
   const inArea = (r) => Number.isInteger(r) && r >= cfg.first_data_row && (!cfg.max_row || r <= cfg.max_row);
   if (map && inArea(map.excel_row)) {
     // Tolak bila baris terpetakan kini diklaim registrasi lain (konflik mapping).
@@ -340,7 +341,27 @@ async function upsertRegistration(cfg, state, dryRun = false) {
     };
     resolvedBy = "mapping";
   } else {
-    existing = records.find((rec) => rec.key === key) ?? null;
+    // Pencocokan nama (legacy) dengan proteksi ownership:
+    //  * baris yang masih dipetakan ke registrasi AKTIF lain → JANGAN disentuh;
+    //  * baris yang dipetakan ke registrasi yang SUDAH TERHAPUS dari DB
+    //    (stale mapping / baris yatim, sisa jalur "Hilangkan dari Event" sebelum
+    //    trigger DELETE ada) → aman direklamasi registrasi baru ini;
+    //  * baris tanpa mapping → pencocokan nama biasa.
+    const { data: liveRegs } = await db.from("event_registrations").select("id")
+      .eq("event_id", cfg.event_id).neq("status", "CANCELLED");
+    const liveIds = new Set((liveRegs ?? []).map((r) => r.id));
+    const { data: claimMaps } = await db.from("excel_sync_row_mappings").select("registration_id, excel_row")
+      .eq("configuration_id", cfg.id);
+    const claimByRow = new Map((claimMaps ?? []).map((m) => [m.excel_row, m.registration_id]));
+    const isLive = (rid) => rid && liveIds.has(rid) && rid !== state.registration_id;
+    const isStale = (rid) => rid && !liveIds.has(rid) && rid !== state.registration_id;
+    existing = records.find((rec) => {
+      if (rec.key !== key) return false;
+      const owner = claimByRow.get(rec.row) ?? null;
+      if (isLive(owner)) return false;   // milik registrasi aktif lain → jangan sentuh
+      return true;                        // bebas / yatim (stale) → boleh dipakai
+    }) ?? null;
+    if (existing && isStale(claimByRow.get(existing.row) ?? null)) staleOwnerRow = existing.row;
   }
 
   if (!dryRun) await markProcessing();
@@ -350,6 +371,27 @@ async function upsertRegistration(cfg, state, dryRun = false) {
     // Duplicate protection: sudah ada.
     const incompleteFix = cfg.duplicate_strategy === "update_empty_fields";
     let changed = false;
+    // Baris yatim (mapping menunjuk registrasi yang sudah terhapus): mapping lama
+    // diganti ke registrasi sekarang, dan nilai lama pada baris DIANGGAP TIDAK SAH —
+    // ditimpa penuh dengan state DB (source of truth), bukan REVIEW_REQUIRED palsu.
+    if (staleOwnerRow === existing.row) {
+      notes.push(`reclaimed-stale-row@r${existing.row}`);
+      for (const field of ["ku", "gender", "birth_date"]) {
+        const col = cols[field];
+        if (!col) continue;
+        const want = String(field === "ku" ? kuShort(state.ku) : field === "gender" ? state.gender : state.birth_date ?? "").trim();
+        if (String(existing.values[field] ?? "").trim() !== want) {
+          ws.getCell(existing.row, col).value = want || "DATA INCOMPLETE";
+          existing.values[field] = want; // snapshot ikut diperbarui → loop guard di bawah tidak false-mismatch
+          changed = true;
+          notes.push(`stale-fix ${field}@r${existing.row}`);
+        }
+      }
+      // Mapping yatim lama (registrasi terhapus) tidak boleh bertahan —
+      // baris kini milik registrasi sekarang (di-upsert di bawah).
+      if (!dryRun) await db.from("excel_sync_row_mappings")
+        .delete().eq("configuration_id", cfg.id).eq("excel_row", existing.row);
+    }
     for (const field of ["ku", "gender", "birth_date"]) {
       const col = cols[field];
       if (!col || !incompleteFix) continue;
@@ -462,6 +504,19 @@ async function deleteRegistration(cfg, registrationId, dryRun = false, snap = nu
   if (!map) return { outcome: "SKIPPED_NO_MAPPING", note: "tidak ada mapping stabil — tidak melakukan destructive delete" };
 
   const { wb, ws, cols } = await readWorkbookRecords(cfg);
+  // GUARD RECLAIM: bila baris terpetakan kini dimiliki registrasi HIDUP lain
+  // (atlet dihapus lalu daftar ulang, job delete telat diproses), baris itu
+  // sudah bukan milik registrasi terhapus → jangan kosongkan data yang valid.
+  const { data: rowClaim } = await db.from("excel_sync_row_mappings").select("registration_id")
+    .eq("configuration_id", cfg.id).eq("excel_row", map.excel_row).limit(2);
+  const otherClaim = (rowClaim ?? []).find((m) => m.registration_id && m.registration_id !== registrationId);
+  if (otherClaim) {
+    const { data: claimReg } = await db.from("event_registrations").select("id, status")
+      .eq("id", otherClaim.registration_id).limit(1).maybeSingle();
+    if (claimReg && claimReg.status !== "CANCELLED") {
+      return { outcome: "SKIPPED_RECLAIMED", note: `r${map.excel_row} sudah dimiliki registrasi baru (hidup) — baris tidak diganggu` };
+    }
+  }
   const rowName = cols.name && normKey(cellText(ws.getCell(map.excel_row, cols.name)));
   if (rowName && map.athlete_key && rowName !== map.athlete_key) {
     return { outcome: "REVIEW_REQUIRED", note: `mapping r${map.excel_row} berisi nama lain sekarang` };
