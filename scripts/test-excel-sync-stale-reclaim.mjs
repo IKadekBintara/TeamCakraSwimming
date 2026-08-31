@@ -32,6 +32,7 @@ await wb.xlsx.writeFile(XLSX_FILE);
 const ev = (await db.from("events").insert({ name: `${TAG} Event`, event_date: "2026-12-19", status: "OPEN" }).select().single()).data;
 const par = (await db.from("parents").insert({ full_name: TAG, whatsapp: "6281200000002" }).select().single()).data;
 const ath = (await db.from("athletes").insert({ full_name: `${TAG} AMIRUL TEST`, gender: "M", birth_date: "2014-10-29", cakra: "Cakra 2", parent_id: par.id, status: "ACTIVE" }).select().single()).data;
+const ath2 = (await db.from("athletes").insert({ full_name: `${TAG} UFAIRA TEST`, gender: "F", birth_date: "2013-12-08", cakra: "Cakra 2", parent_id: par.id, status: "ACTIVE" }).select().single()).data;
 const race = (await db.from("event_races").insert({ event_id: ev.id, name: `${TAG} 50M`, ku_label: "KU III", price: 55000 }).select().single()).data;
 console.log("fixture: event/race/athlete dibuat");
 
@@ -125,6 +126,36 @@ try {
   // ===== TAHAP 5: verifikasi mapping reg2 → baris yang sama =====
   const map2 = (await db.from("excel_sync_row_mappings").select("*").eq("configuration_id", cfg.id).eq("registration_id", reg2.id).maybeSingle()).data;
   ok(map2?.excel_row === 22, "T10 mapping reg2 = r22", JSON.stringify(map2?.excel_row));
+
+  // ===== TAHAP 6: NO backfill — baris baru tanpa NO mendapat nomor (bug UFaira/35-41) =====
+  // Simulasi workbook pindahan: baris terpetakan ada, tapi kolom NO-nya kosong.
+  {
+    let wbN = new ExcelJS.Workbook(); await wbN.xlsx.readFile(XLSX_FILE);
+    const wsN = wbN.getWorksheet("FORMULIR A1");
+    wsN.getCell(22, 1).value = null; // hapus NO manual pada baris terpetakan
+    await wbN.xlsx.writeFile(XLSX_FILE);
+    const reg3 = await ins("event_registrations", { event_id: ev.id, athlete_id: ath2.id, ku: "KU II", status: "REGISTERED" });
+    j = await waitForNewJob(lastJobId);
+    lastJobId = Math.max(lastJobId, j?.id ?? lastJobId);
+    ok(j?.status === "SUCCESS", "T11 job upsert reg3 (row tanpa NO) SUCCESS", JSON.stringify(j));
+    // Backfill baris reg2 terjadi saat job upsert reg2 diproses ulang (Sync Now/reconcile)
+    await insJob({ ...cfgJobBase, action: "reconcile", payload: { trigger: "e2e-no-backfill" } });
+    j = await waitForNewJob(lastJobId);
+    lastJobId = Math.max(lastJobId, j?.id ?? lastJobId);
+    ok(j?.status === "SUCCESS", "T11b reconcile (backfill NO reg2) SUCCESS", JSON.stringify(j));
+    wbN = new ExcelJS.Workbook(); await wbN.xlsx.readFile(XLSX_FILE);
+    const no22 = cell(wbN.getWorksheet("FORMULIR A1"), 22, 1);
+    ok(no22 !== "" && no22 !== null, "T12 baris terpetakan tanpa NO → NO ter-backfill", JSON.stringify(no22));
+    const no23 = cell(wbN.getWorksheet("FORMULIR A1"), 23, 1);
+    ok(no23 !== "" && no23 !== null && String(no23) !== String(no22), "T13 baris baru reg3 dapat NO unik ≠ baris reg2", JSON.stringify({ no22, no23 }));
+    // reg3 dihapus (trigger DELETE) — baris & nomor dihapusnya dibersihkan
+    await db.from("event_registration_entries").delete().eq("registration_id", reg3.id);
+    await db.from("event_payments").delete().eq("registration_id", reg3.id);
+    await db.from("event_registrations").delete().eq("id", reg3.id);
+    j = await waitForNewJob(lastJobId);
+    lastJobId = Math.max(lastJobId, j?.id ?? lastJobId);
+    ok(j?.action === "delete_registration" && j?.status === "SUCCESS", "T14 cleanup delete reg3 SUCCESS", JSON.stringify(j));
+  }
 } finally {
   // ===== cleanup (idempotent) =====
   console.log("\n--- cleanup fixture ---");
@@ -138,6 +169,7 @@ try {
   await db.from("event_races").delete().eq("event_id", ev.id);
   await db.from("excel_sync_configurations").delete().eq("id", cfg.id); // mappings ikut cascade
   await db.from("athletes").delete().eq("id", ath.id);
+  await db.from("athletes").delete().eq("id", ath2.id);
   await db.from("parents").delete().eq("id", par.id);
   await db.from("events").delete().eq("id", ev.id);
   if (globalOld !== undefined) await db.from("excel_sync_settings").update({ enabled: globalOld }).eq("id", "global");

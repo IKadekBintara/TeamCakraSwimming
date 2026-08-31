@@ -304,6 +304,23 @@ function expandArea(ws, cfg, needed, nameCol) {
   return add;
 }
 
+/** Nomor urut untuk kolom NO: bilangan positif TERKECIL yang belum terpakai
+ *  di area (mulai dari NO terkecil existing, default 1). Mengisi gap berurutan
+ *  (35, 36, 37, ...) tanpa pernah menduplikasi nomor yang sudah ada. */
+function computeNextNo(records) {
+  const used = new Set();
+  let min = null;
+  for (const ref of records) {
+    const n = parseInt(String(ref.values?.no ?? "").trim(), 10);
+    if (Number.isNaN(n) || n < 1) continue;
+    used.add(n);
+    if (min === null || n < min) min = n;
+  }
+  let candidate = min ?? 1;
+  while (used.has(candidate)) candidate++;
+  return candidate;
+}
+
 /** Tulis satu baris atlet pada area config (tanpa menyentuh area lain).
  *  IDENTITAS: baris ditentukan oleh MAPPING STABIL (config+registration → excel_row),
  *  bukan nama. Rename/koreksi typo TIDAK PERNAH membuat baris baru — nama pada
@@ -392,6 +409,16 @@ async function upsertRegistration(cfg, state, dryRun = false) {
       if (!dryRun) await db.from("excel_sync_row_mappings")
         .delete().eq("configuration_id", cfg.id).eq("excel_row", existing.row);
     }
+    // BACKFILL NO: baris terpetakan yang kolom NO-nya kosong (mis. peninggalan
+    // migrasi file/pindah workbook) diisi nomor urut berikutnya. Nilai NO yang
+    // sudah ada TIDAK diubah (NO manual sah & tidak pernah di-rename worker).
+    if (cols.no && !String(existing.values.no ?? "").trim()) {
+      const next = computeNextNo(records);
+      ws.getCell(existing.row, cols.no).value = next;
+      existing.values.no = String(next);
+      changed = true;
+      notes.push(`no-backfill@r${existing.row}=#${next}`);
+    }
     for (const field of ["ku", "gender", "birth_date"]) {
       const col = cols[field];
       if (!col || !incompleteFix) continue;
@@ -459,13 +486,7 @@ async function upsertRegistration(cfg, state, dryRun = false) {
   }
   // NO = nomor urut berikutnya (maksimum existing + 1)
   const noCol = cols.no;
-  let nextNo = 1;
-  if (noCol) {
-    for (const rec of records) {
-      const n = parseInt(rec.values.no, 10);
-      if (!Number.isNaN(n)) nextNo = Math.max(nextNo, n + 1);
-    }
-  }
+  const nextNo = computeNextNo(records);
   if (!dryRun) {
     applyTemplateStyle(ws, cfg, target);
     if (noCol) ws.getCell(target, noCol).value = nextNo;
