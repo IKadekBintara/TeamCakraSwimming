@@ -543,13 +543,74 @@ async function deleteRegistration(cfg, registrationId, dryRun = false, snap = nu
     return { outcome: "REVIEW_REQUIRED", note: `mapping r${map.excel_row} berisi nama lain sekarang` };
   }
   if (!dryRun) {
-    for (const col of Object.values(cols)) {
-      if (col) ws.getCell(map.excel_row, col).value = null;   // kosongkan sel area saja
-    }
+    // KOMPAKSI: baris terhapus diisi baris di bawahnya menggeser naik (bukan
+    // hanya dikosongkan), lalu NO disusun ulang 1..N dan mapping bergeser.
+    await compactAreaAfterDelete(ws, cfg, cols, map.excel_row);
     await wb.xlsx.writeFile(cfg.file_path);
     if (map.id) await db.from("excel_sync_row_mappings").delete().eq("id", map.id);
   }
-  return { outcome: "DELETED", row: map.excel_row };
+  return { outcome: "DELETED_COMPACTED", row: map.excel_row };
+}
+
+/** Kompaksi area peserta setelah satu baris dihapus: baris di bawah `delRow`
+ *  menggeser naik satu slot (value+style+height), baris terakhir dikosongkan,
+ *  merge dalam area ikut bergeser, NO disusun ulang 1..N, dan mapping
+ *  excel_row (DB) milik config ini di-update. Mapping config lain di workbook
+ *  yang sama tidak disentuh. */
+async function compactAreaAfterDelete(ws, cfg, cols, delRow) {
+  const first = cfg.first_data_row;
+  const last = cfg.max_row ?? Math.max(ws.rowCount, first);
+  const maxCol = Math.max(ws.columnCount || 9, 9);
+
+  // 1) Geser fisik ke atas: r = delRow+1..last → tulis ke r-1.
+  for (let r = delRow + 1; r <= last; r++) {
+    for (let c = 1; c <= maxCol; c++) {
+      const src = ws.getCell(r, c);
+      const dst = ws.getCell(r - 1, c);
+      dst.value = src.value;
+      dst.style = { ...src.style };
+    }
+    try { ws.getRow(r - 1).height = ws.getRow(r).height ?? undefined; } catch {}
+  }
+  // 2) Kosongkan baris terakhir + buang merge yang menunjuk baris itu.
+  for (let c = 1; c <= maxCol; c++) {
+    ws.getCell(last, c).value = null;
+    ws.getCell(last, c).style = {};
+  }
+  try { ws.getRow(last).height = undefined; } catch {}
+  const model = ws.model;
+  if (model && Array.isArray(model.merges)) {
+    for (let i = model.merges.length - 1; i >= 0; i--) {
+      const m = model.merges[i];
+      const s = typeof m === "string" ? m : m.range ?? String(m);
+      const mm = /([A-Z]+)(\d+):([A-Z]+)(\d+)/.exec(String(s));
+      if (!mm) continue;
+      const r1 = parseInt(mm[2], 10);
+      const r2 = parseInt(mm[4], 10);
+      if (r1 >= delRow && r2 === last) { model.merges.splice(i, 1); continue; } // merge baris terakhir → hilang
+      if (r1 >= delRow) {                                                       // merge dalam area → naik 1
+        const shifted = `${mm[1]}${r1 - 1}:${mm[3]}${r2 - 1}`;
+        model.merges[i] = typeof m === "string" ? shifted : { ...m, range: shifted };
+      }
+    }
+  }
+  // 3) Susun ulang NO kompak 1..N berdasar urutan baris ber-nama dari atas;
+  //    baris tanpa nama dibersihkan NO-nya (tidak ada nomor basi/hole).
+  if (cols.no) {
+    let n = 1;
+    for (let r = first; r <= last; r++) {
+      const hasName = !!normKey(cellText(ws.getCell(r, cols.name)));
+      ws.getCell(r, cols.no).value = hasName ? n++ : null;
+    }
+  }
+  // 4) Mapping DB config ini: baris di bawah delRow naik 1 (mapping reg yang
+  //    dihapus sendiri ada DI delRow dan dihapus oleh pemanggil setelah ini).
+  const { data: maps } = await db.from("excel_sync_row_mappings")
+    .select("id, excel_row").eq("configuration_id", cfg.id).gt("excel_row", delRow);
+  for (const m of maps ?? []) {
+    await db.from("excel_sync_row_mappings")
+      .update({ excel_row: m.excel_row - 1, updated_at: new Date().toISOString() }).eq("id", m.id);
+  }
 }
 
 // ---------- job lifecycle ----------

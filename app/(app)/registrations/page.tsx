@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { rupiah, paymentStatusLabel, type PaymentStatus } from "@/lib/events";
 import { getCakraGroups } from "@/lib/groups";
+import DeleteRegistrationButton from "./DeleteRegistrationButton";
 
 export const dynamic = "force-dynamic";
 
@@ -238,13 +239,14 @@ export default async function RegistrationsPage({
       <div className="table-wrap">
         <table className="table !min-w-[880px]">
           <thead>
-            <tr><th>Atlet</th><th>Event</th><th>Kelompok</th><th>KU</th><th>Uang Event</th><th>Admin</th><th>Total</th><th>Dibayar</th><th>Status</th><th>Detail</th></tr>
+            <tr><th>Atlet</th><th>Event</th><th>Kelompok</th><th>KU</th><th>Uang Event</th><th>Admin</th><th>Total</th><th>Dibayar</th><th>Status</th><th>Detail</th><th>Aksi</th></tr>
           </thead>
           <tbody>
             {displayRows.map((r, i) => {
               const ev = r.event as { id?: string; name?: string } | null;
               const reg = r.registration as { ku?: string; status?: string } | null;
               const regKu = reg?.ku ?? "";
+              const regId = r.registration_id as string | undefined;
               return (
                 <tr key={r.id}>
                   <td>
@@ -270,6 +272,7 @@ export default async function RegistrationsPage({
                   <td className="whitespace-nowrap text-brand-700">{rupiah(r.amount_paid)}</td>
                   <td><span className={badgeClass(r.payment_status)}>{paymentStatusLabel(r.payment_status as PaymentStatus)}</span></td>
                   <td><Link href={`/keuangan?q=${encodeURIComponent(r.athlete_name)}`} className="text-xs font-medium text-brand-700 hover:underline">Buka</Link></td>
+                  <td>{regId && <DeleteRegistrationButton registrationId={regId} athleteName={liveNames.get(r.athlete_id as string) ?? r.athlete_name} eventName={ev?.name ?? "-"} />}</td>
                 </tr>
               );
             })}

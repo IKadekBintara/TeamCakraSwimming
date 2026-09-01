@@ -156,6 +156,36 @@ try {
     lastJobId = Math.max(lastJobId, j?.id ?? lastJobId);
     ok(j?.action === "delete_registration" && j?.status === "SUCCESS", "T14 cleanup delete reg3 SUCCESS", JSON.stringify(j));
   }
+
+  // ===== TAHAP 7: KOMPAKSI — hapus baris ATAS → baris bawah naik mengisi =====
+  {
+    const reg4 = await ins("event_registrations", { event_id: ev.id, athlete_id: ath2.id, ku: "KU II", status: "REGISTERED" });
+    j = await waitForNewJob(lastJobId);
+    lastJobId = Math.max(lastJobId, j?.id ?? lastJobId);
+    ok(j?.status === "SUCCESS", "T15 reg4 (ath2) SUCCESS — area r22+r23 terisi", JSON.stringify(j));
+    const dumpRows = async (label) => {
+      const wbD = new ExcelJS.Workbook(); await wbD.xlsx.readFile(XLSX_FILE);
+      const wsD = wbD.getWorksheet("FORMULIR A1");
+      for (let r = 22; r <= 25; r++) console.log(`  DEBUG ${label} r${r}: no=${JSON.stringify(cell(wsD, r, 1))} ku=${JSON.stringify(cell(wsD, r, 2))} name=${JSON.stringify(cell(wsD, r, 4))}`);
+    };
+    // Hapus reg2 (baris ATAS r22): reg4 (r23) harus naik ke r22, NO r22 = 1, r23 kosong.
+    await db.from("event_registration_entries").delete().eq("registration_id", reg2.id);
+    await db.from("event_payments").delete().eq("registration_id", reg2.id);
+    await db.from("event_registrations").delete().eq("id", reg2.id);
+    j = await waitForNewJob(lastJobId);
+    lastJobId = Math.max(lastJobId, j?.id ?? lastJobId);
+    ok(j?.action === "delete_registration" && j?.status === "SUCCESS", "T16 job delete reg2 SUCCESS (compact)", JSON.stringify({ id: j?.id, status: j?.status, last_error: j?.last_error }));
+    await new Promise((r) => setTimeout(r, 500)); // biar tulis worker settle
+    await dumpRows("setelah-delete");
+    const wbC = new ExcelJS.Workbook(); await wbC.xlsx.readFile(XLSX_FILE);
+    const wsC = wbC.getWorksheet("FORMULIR A1");
+    const r22c = { no: cell(wsC, 22, 1), ku: cell(wsC, 22, 2), name: cell(wsC, 22, 4) };
+    const r23c = { no: cell(wsC, 23, 1), name: cell(wsC, 23, 4) };
+    ok(String(r22c.name).toUpperCase() === `${TAG} UFAIRA TEST`.toUpperCase() && String(r22c.no) === "1", "T17 baris bawah naik ke r22 + NO menyusun ulang (1)", JSON.stringify(r22c));
+    ok(r23c.name === "" && r23c.no === "", "T18 r23 kosong setelah kompaksi", JSON.stringify(r23c));
+    const map4 = (await db.from("excel_sync_row_mappings").select("excel_row").eq("configuration_id", cfg.id).eq("registration_id", reg4.id).maybeSingle()).data;
+    ok(map4?.excel_row === 22, "T19 mapping reg4 bergeser 23→22", JSON.stringify(map4));
+  }
 } finally {
   // ===== cleanup (idempotent) =====
   console.log("\n--- cleanup fixture ---");
