@@ -19,6 +19,7 @@ import ExcelJS from "exceljs";
 import os from "node:os";
 import { readFileSync } from "node:fs";
 import { statFile, rmFile } from "./fs-utils.mjs";
+import { saveWorkbookAtomic, listStaleTemps } from "./atomic-save.mjs";
 import path from "node:path";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -661,7 +662,7 @@ async function upsertRegistration(cfg, state, dryRun = false) {
         ws.getCell(existing.row, Number(c)).value = mark;
       }
       // Selalu tulis: normalisasi style saja (tanpa perubahan nilai) juga harus persisten.
-      await wb.xlsx.writeFile(cfg.file_path);
+      await saveWorkbookAtomic(wb, cfg.file_path);
       await readBackVerify(cfg, existing.row, cols, {
         ku: writeKuValue(cfg, state.ku), gender: state.gender,
         birth_date: state.birth_date ?? "", name: String(state.name || "").toUpperCase(),
@@ -714,7 +715,7 @@ async function upsertRegistration(cfg, state, dryRun = false) {
       ws.getCell(target, Number(c)).value = mark;
     }
     ensureKuWidth(ws, cfg, cols);
-    await wb.xlsx.writeFile(cfg.file_path);
+    await saveWorkbookAtomic(wb, cfg.file_path);
     await readBackVerify(cfg, target, cols, {
       ku: writeKuValue(cfg, state.ku), gender: state.gender,
       birth_date: state.birth_date ?? "", name: String(state.name || "").toUpperCase(),
@@ -766,7 +767,7 @@ async function deleteRegistration(cfg, registrationId, dryRun = false, snap = nu
     // KOMPAKSI: baris terhapus diisi baris di bawahnya menggeser naik (bukan
     // hanya dikosongkan), lalu NO disusun ulang 1..N dan mapping bergeser.
     await compactAreaAfterDelete(ws, cfg, cols, map.excel_row);
-    await wb.xlsx.writeFile(cfg.file_path);
+    await saveWorkbookAtomic(wb, cfg.file_path);
     if (map.id) await db.from("excel_sync_row_mappings").delete().eq("id", map.id);
   }
   return { outcome: "DELETED_COMPACTED", row: map.excel_row };
@@ -1044,8 +1045,10 @@ export async function runExpandTo(minRows, cfgId) {
     const add = expandArea(ws, cfg, needed, nameCol);
     if (add <= 0) throw new Error(`expandArea tak mengembang (add=${add})`);
 
-    await rmFile(cfg.file_path);
-    await wb.xlsx.writeFile(cfg.file_path);
+    // ATOMIC: tidak ada `rm` sebelum save. Menghapus file lalu menulis ulang
+    // menciptakan jendela "file hilang" yang memicu Syncthing gagal
+    // ("removing item to be replaced: being used by another process").
+    await saveWorkbookAtomic(wb, cfg.file_path);
     await db.from("excel_sync_configurations").update({
       max_row: cfg.max_row, updated_at: new Date().toISOString(),
     }).eq("id", cfg.id);
@@ -1068,8 +1071,26 @@ async function tick() {
 
 let running = true;
 process.on("SIGINT", () => { running = false; console.log("\n[worker] berhenti setelah iterasi ini"); });
+process.on("SIGTERM", () => { running = false; });
+
+/**
+ * Bersihkan sisa file temp atomic-save (`.nama.tmp-*`) dari crash sebelumnya.
+ * Temp adalah sampah milik worker sendiri — file tujuan TIDAK pernah disentuh.
+ * Dijalankan saat start agar folder tidak menumpuk file `.tmp-*`
+ * (dan tidak membuat Syncthing ikut menyinkronkannya).
+ */
+async function cleanupStaleTemps() {
+  const { data: cfgs } = await db.from("excel_sync_configurations").select("file_path, name");
+  for (const cfg of cfgs ?? []) {
+    try {
+      const temps = await listStaleTemps(cfg.file_path);
+      for (const t of temps) { await rmFile(t); log(`cleanup temp: ${t}`); }
+    } catch { /* folder tak terjangkau — abaikan, jangan sampai worker gagal start */ }
+  }
+}
 
 log(`start — poll=${POLL_MS}ms worker_id=${WORKER_ID} heartbeat=${HEARTBEAT_MS}ms`);
+await cleanupStaleTemps();
 await heartbeat();
 startHeartbeatLoop();
 while (running) {
@@ -1082,4 +1103,5 @@ while (running) {
   await new Promise((r) => setTimeout(r, POLL_MS));
 }
 clearInterval(hbTimer);
+log("worker berhenti — semua handle workbook sudah dilepas");
 process.exit(0);
