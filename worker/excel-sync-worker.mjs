@@ -22,6 +22,7 @@ import { statFile, rmFile } from "./fs-utils.mjs";
 import path from "node:path";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { computeKuJuknis, kuForExcel } from "../lib/kuJuknis.mjs";
 
 // ---------- env ----------
 // Muat .env.local dari root project (relatif lokasi file ini)
@@ -241,7 +242,12 @@ function colToNum(letters) {
 
 /** Nilai KU untuk ditulis: template bisa minta bentuk singkat ("3") atau panjang ("KU III"). */
 function writeKuValue(cfg, ku) {
-  return cfg.ku_format === "short" ? kuShortForTemplate(ku) : kuShort(ku);
+  const s = String(ku ?? "").trim();
+  if (!s) return "";
+  // KU hasil Juknis berbentuk "KU-6B" / "KU-6A" / "KU-5"; template memakai
+  // bentuk singkat tanpa prefix ("6B","6A","5","4","3") saat ku_format=short.
+  if (cfg.ku_format === "short") return kuForExcel(s, "short");
+  return kuShort(s);
 }
 
 /** READ-BACK khusus kolom centang: pastikan tanda ✓ benar-benar tersimpan. */
@@ -275,7 +281,7 @@ function cellHeaderText(ws, row, col) {
 }
 
 /** Current-state registration untuk job. */
-async function fetchCurrentState(registrationId) {
+async function fetchCurrentState(registrationId, cfg = null) {
   const { data: reg, error } = await db.from("event_registrations")
     .select("id, event_id, athlete_id, ku, ku_override, status, created_at, athletes(full_name, gender, birth_date)")
     .eq("id", registrationId)
@@ -292,13 +298,27 @@ async function fetchCurrentState(registrationId) {
     .select("payment_status, total_amount, amount_paid, payment_method")
     .eq("registration_id", reg.id).maybeSingle();
   const ath = Array.isArray(reg.athletes) ? reg.athletes[0] : reg.athletes;
+
+  // KU DIHITUNG DARI TAHUN LAHIR (Juknis event), BUKAN dari string `reg.ku`
+  // yang tersimpan di DB. String itu bisa berasal dari skema KU versi lama
+  // (mis. "KU IV", "KU 2021-Ke atas") sehingga bocor ke Excel.
+  // `cfg.ku_rules` (kalau ada) = aturan event; jika tidak ada aturan KU pada
+  // config, perilaku lama (pakai string DB) TIDAK berubah → event lain aman.
+  const rules = cfg?.ku_rules?.ranges ? { ranges: cfg.ku_rules.ranges, races: cfg.ku_rules.races ?? {} } : null;
+  const kuComputed = rules ? computeKuJuknis(ath?.birth_date, rules) : { ku: "", valid: false, reason: "config tanpa ku_rules" };
+  const kuStored = reg.ku_override || reg.ku || "";
+  const kuFinal = kuComputed.valid ? kuComputed.ku : kuStored;
+
   return {
     registration_id: reg.id,
     athlete_id: reg.athlete_id,
     name: ath?.full_name ?? "",
     gender: genderPAPI(ath?.gender),
     birth_date: fmtDateDDMMYYYY(ath?.birth_date),
-    ku: reg.ku_override || reg.ku || "",
+    ku: kuFinal,
+    ku_raw: kuStored,
+    ku_valid: kuComputed.valid,
+    ku_reason: kuComputed.reason,
     status: reg.status,
     race_names: races.join(", "),
     race_list: races, // array mentah untuk checkbox multi-kolom (NOMOR LOMBA)
@@ -597,7 +617,20 @@ async function upsertRegistration(cfg, state, dryRun = false) {
       const want = String(field === "ku" ? writeKuValue(cfg, state.ku) : field === "gender" ? state.gender : state.birth_date ?? "").trim();
       if (!cur && want) { ws.getCell(existing.row, col).value = want; changed = true; }
       else if (cur && want && cur.replace(/\s+/g, "").toUpperCase() !== want.replace(/\s+/g, "").toUpperCase()) {
-        return { outcome: "REVIEW_REQUIRED", note: `DATA_MISMATCH ${field} @r${existing.row}: excel="${cur}" db="${want}"` };
+        // KU RECOMPUTE: bila config punya aturan KU Juknis (`ku_rules`) dan KU
+        // dihitung VALID dari tahun lahir, nilai KU lama di Excel adalah label
+        // dari skema KU versi lama (mis. "2021-KE ATAS", "2020") → TIMPA dengan
+        // nilai Juknis. Perubahan resmi dari Juknis, bukan konflik data.
+        // Field lain (gender/birth_date) TETAP diproteksi REVIEW_REQUIRED.
+        const kuAuthorized = field === "ku" && state.ku_valid === true && !!cfg.ku_rules;
+        if (kuAuthorized) {
+          ws.getCell(existing.row, col).value = want;
+          existing.values[field] = want;
+          changed = true;
+          notes.push(`ku-juknis-overwrite@r${existing.row}: "${cur}" -> "${want}"`);
+        } else {
+          return { outcome: "REVIEW_REQUIRED", note: `DATA_MISMATCH ${field} @r${existing.row}: excel="${cur}" db="${want}"` };
+        }
       }
     }
     // RENAME / NORMALISASI CASE: perbarui sel nama pada baris terpetakan
@@ -862,7 +895,7 @@ async function runJob(job) {
     } else if (job.action === "reconcile") {
       result = await reconcile(effCfg);
     } else {
-      const state = await fetchCurrentState(job.registration_id);
+      const state = await fetchCurrentState(job.registration_id, cfg);
       result = state ? await upsertRegistration(cfg, state) : { outcome: "DELETED", note: "reg terhapus di DB" };
     }
 
@@ -910,7 +943,7 @@ async function reconcile(cfg) {
   const summary = { db_registrations: regs?.length ?? 0, inserted: 0, skipped_existing: 0, review: 0, review_details: [], errors: [] };
   for (const r of regs ?? []) {
     try {
-      const state = await fetchCurrentState(r.id);
+      const state = await fetchCurrentState(r.id, cfg);
       // Tulis NYATA (bukan dryRun) — reconcile adalah mekanisme backfill.
       const res = await upsertRegistration(cfg, state);
       if (res.outcome === "INSERTED" || res.outcome === "UPDATED") summary.inserted++;
@@ -965,7 +998,7 @@ async function dryRunConfig(cfg) {
   const summary = { db_registrations: regs?.length ?? 0, insert: 0, update: 0, skip: 0, review_required: 0, mismatch: [], notes: [] };
   for (const r of regs ?? []) {
     try {
-      const state = await fetchCurrentState(r.id);
+      const state = await fetchCurrentState(r.id, cfg);
       const res = state ? await upsertRegistration(cfg, state, true) : { outcome: "SKIP", note: "reg hilang" };
       if (res.outcome === "INSERTED") summary.insert++;
       else if (res.outcome === "UPDATED") summary.update++;
