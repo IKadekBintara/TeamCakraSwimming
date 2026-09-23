@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { calculateDolphinKu, rupiah } from "@/lib/events";
+import { calculateDolphinKu, kuMatches, rupiah } from "@/lib/events";
 
 interface Race { id: string; name: string; allowed_kus: string[]; is_relay: boolean; price?: number; is_free?: boolean; }
 interface Athlete { id: string; full_name: string; birth_date: string | null; cakra: string | null; }
@@ -22,7 +22,7 @@ export default function EventRegistrationForm({ event, races, athletes, canManag
   const athlete = athletes.find((a) => a.id === athleteId);
   const ku = athlete ? calculateDolphinKu(athlete.birth_date) : "—";
   const effectiveKu = kuOverride || ku;
-  const availableRaces = useMemo(() => races.filter((r) => r.allowed_kus.length === 0 || r.allowed_kus.includes(effectiveKu)), [races, effectiveKu]);
+  const availableRaces = useMemo(() => races.filter((r) => kuMatches(effectiveKu, r.allowed_kus)), [races, effectiveKu]);
   const selectedRaces = selected.map((id) => races.find((r) => r.id === id)).filter(Boolean) as Race[];
   const registrationFee = selectedRaces.reduce((sum, r) => sum + (r.is_free ? 0 : Number(r.price ?? 0)), 0);
   const total = registrationFee + Number(event.admin_fee);
