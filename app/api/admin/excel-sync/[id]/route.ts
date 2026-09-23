@@ -78,6 +78,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (b.max_row !== undefined) patch.max_row = b.max_row === null || b.max_row === "" ? null : Number(b.max_row);
       if (b.mapping !== undefined) patch.mapping = b.mapping;
       if (b.duplicate_strategy !== undefined) patch.duplicate_strategy = b.duplicate_strategy === "update_empty_fields" ? "update_empty_fields" : "skip";
+      if (b.checkbox_fields !== undefined) patch.checkbox_fields = b.checkbox_fields;
+      if (b.ku_format !== undefined) patch.ku_format = b.ku_format === "short" ? "short" : "long";
+      if (b.checkbox_group_row !== undefined) patch.checkbox_group_row = b.checkbox_group_row === null || b.checkbox_group_row === "" ? null : Number(b.checkbox_group_row);
+      if (b.checkbox_sub_row !== undefined) patch.checkbox_sub_row = b.checkbox_sub_row === null || b.checkbox_sub_row === "" ? null : Number(b.checkbox_sub_row);
       const { data: updated, error } = await db.from("excel_sync_configurations").update(patch).eq("id", id).select().single();
       if (error) return fail(error.message, 500, rid);
       await db.from("excel_sync_logs").insert({

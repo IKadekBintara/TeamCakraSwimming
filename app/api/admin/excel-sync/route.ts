@@ -143,6 +143,11 @@ export async function POST(req: NextRequest) {
       max_row: b.max_row ? Number(b.max_row) : null,
       mapping: b.mapping ?? {},
       duplicate_strategy: b.duplicate_strategy === "update_empty_fields" ? "update_empty_fields" : "skip",
+      // Checkbox multi-kolom + format KU (opsional; tanpa ini perilaku lama tetap).
+      checkbox_fields: b.checkbox_fields ?? null,
+      ku_format: b.ku_format === "short" ? "short" : "long",
+      checkbox_group_row: b.checkbox_group_row ? Number(b.checkbox_group_row) : null,
+      checkbox_sub_row: b.checkbox_sub_row ? Number(b.checkbox_sub_row) : null,
       enabled: Boolean(b.enabled ?? false),
       created_by: ctx.user.id,
     })

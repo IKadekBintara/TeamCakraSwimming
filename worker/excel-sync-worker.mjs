@@ -109,6 +109,171 @@ function genderPAPI(g) {
   return ""; // DATA INCOMPLETE — jangan menebak
 }
 
+/**
+ * KU bentuk SINGKAT untuk template (mis. "KU III" -> "3", "KU 6B" -> "6B").
+ * Template Rengganis memakai kolom "KELOMPOK UMUR 6A/6B/5/4/3" sehingga label
+ * panjang tidak muat. Konversi Romawi->Arab dilakukan eksplisit (III->3) agar
+ * cocok dengan pilihan dropdown template.
+ */
+const KU_ROMAN = { I: 1, II: 2, III: 3, IV: 4, V: 5 };
+function kuShortForTemplate(ku) {
+  const s = kuShort(ku); // buang prefix "KU" -> "III", "6B", "2019"
+  if (!s) return "";
+  const up = s.toUpperCase();
+  if (KU_ROMAN[up]) return String(KU_ROMAN[up]); // III -> 3
+  return up;
+}
+
+/** Tahun kelahiran dari tanggal (YYYY-MM-DD) -> "2013". */
+function birthYear(v) {
+  const s = String(v ?? "").trim();
+  const m = /(\d{4})/.exec(s);
+  return m ? m[1] : "";
+}
+
+/**
+ * Checkbox multi-kolom (mis. NOMOR LOMBA pada Form_Pendaftaran.xlsx):
+ * satu field DB dipetakan ke BANYAK kolom, tiap kolom menyala bila nama
+ * nomor lomba cocok. Nonaktif bila config tidak punya `checkbox_fields`
+ * → perilaku lama (1 field = 1 kolom) TIDAK berubah.
+ */
+function normRaceName(s) {
+  return String(s ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, " ")            // rapikan spasi
+    .replace(/GAYA\s+/g, "")         // "25M GAYA BEBAS" vs "25M BEBAS"
+    .replace(/KUPU[\s-]*KUPU/g, "KUPU2");
+}
+
+/**
+ * Pemetaan kolom centang multi-kolom.
+ * Format config: checkbox_fields = { races: { "BEBAS|KICK": "25m Kick Bebas", ... } }
+ * Kunci = "GRUP|SUB" (lihat resolveCheckboxColumn); nilai = nama nomor lomba di DB.
+ * Nonaktif bila config tidak punya `checkbox_fields` → perilaku lama TIDAK berubah.
+ */
+function checkboxPlan(cfg, ws, raceNames) {
+  const spec = cfg.checkbox_fields;
+  if (!spec || typeof spec !== "object") return null;
+  const races = Array.isArray(raceNames) ? raceNames : [];
+  const out = {};
+  const matchedLabels = new Set();
+  for (const [, map] of Object.entries(spec)) {
+    for (const [key, raceName] of Object.entries(map ?? {})) {
+      const [grp, sub] = String(key).split("|");
+      const col = resolveCheckboxColumn(ws, cfg, grp, sub);
+      if (!col) continue;
+      const want = normRaceName(raceName);
+      const hit = races.some((rn) => {
+        const n = normRaceName(rn);
+        return n === want || n.includes(want) || want.includes(n);
+      });
+      // Kolom yang sama bisa muncul dari kunci berbeda — jangan saling menimpa
+      // dengan nilai kosong (OR, bukan last-wins).
+      if (hit) { out[col] = "✓"; matchedLabels.add(String(raceName)); }
+      else if (!(col in out)) out[col] = "";
+    }
+  }
+  out.__matched = matchedLabels;
+  return out;
+}
+
+/**
+ * Resolusi kolom centang: header template BERTINGKAT (mis. Form_Pendaftaran
+ * baris 13 = grup "BEBAS"/"DADA"/"KUPU2"/"PUNGGUNG" sebagai sel MERGED,
+ * baris 14 = sub "KICK"/"25 M"/"50 M").
+ *
+ * PENTING: sub-header ("25 M") TIDAK unik antar grup — "25 M" muncul 4x.
+ * Karena itu pencarian dilakukan DALAM SPAN grup: cari sel grup pada
+ * `group_row` (default header_row+1), ambil rentang kolom merge-nya, lalu
+ * cari sub-header hanya di dalam rentang itu.
+ *
+ * @returns {number|null} index kolom 1-based
+ */
+function resolveCheckboxColumn(ws, cfg, groupLabel, subLabel) {
+  const hr = cfg.header_row;
+  const groupRow = cfg.checkbox_group_row ?? hr + 1;
+  const subRow = cfg.checkbox_sub_row ?? hr + 2;
+  const wantGroup = normKey(groupLabel);
+  const wantSub = normKey(subLabel);
+
+  // 1) Cari RANGE MERGE grup pada groupRow (ExcelJS menggandakan nilai anchor
+  //    ke seluruh sel merge, jadi kita pakai rentang merge-nya, bukan sel pertama).
+  let gStart = null, gEnd = null;
+  const merges = ws.model?.merges ?? [];
+  for (const m of merges) {
+    const s = typeof m === "string" ? m : m.range ?? String(m);
+    const mm = /^\$?([A-Z]+)\$?(\d+):\$?([A-Z]+)\$?(\d+)$/.exec(String(s).replace(/\$/g, ""));
+    if (!mm) continue;
+    const c1 = colToNum(mm[1]), c2 = colToNum(mm[3]);
+    const r1 = Number(mm[2]), r2 = Number(mm[4]);
+    if (groupRow >= r1 && groupRow <= r2 && normKey(cellHeaderText(ws, groupRow, c1)) === wantGroup) {
+      gStart = c1; gEnd = c2; break;
+    }
+  }
+  // 1b) Tanpa merge: cari sel grup tunggal.
+  if (gStart === null) {
+    for (let c = 1; c <= ws.columnCount; c++) {
+      if (normKey(cellHeaderText(ws, groupRow, c)) === wantGroup) { gStart = c; gEnd = c; break; }
+    }
+  }
+  if (gStart === null) return null;
+
+  // 2) Cari sub-header HANYA di dalam span grup (sub tidak unik antar grup).
+  for (let c = gStart; c <= gEnd; c++) {
+    if (normKey(cellHeaderText(ws, subRow, c)) === wantSub) return c;
+  }
+  // 2b) Fallback: sub-header bisa berada di baris lain pada rentang header.
+  for (let c = gStart; c <= gEnd; c++) {
+    for (let r = hr; r <= hr + 3; r++) {
+      if (normKey(cellHeaderText(ws, r, c)) === wantSub) return c;
+    }
+  }
+  return null;
+}
+
+/** "H" -> 8 */
+function colToNum(letters) {
+  let n = 0;
+  for (const ch of String(letters).toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64);
+  return n;
+}
+
+/** Nilai KU untuk ditulis: template bisa minta bentuk singkat ("3") atau panjang ("KU III"). */
+function writeKuValue(cfg, ku) {
+  return cfg.ku_format === "short" ? kuShortForTemplate(ku) : kuShort(ku);
+}
+
+/** READ-BACK khusus kolom centang: pastikan tanda ✓ benar-benar tersimpan. */
+async function readBackVerifyCheckbox(cfg, wsLive, row, plan) {
+  if (!plan) return;
+  const want = {};
+  for (const [c, mark] of Object.entries(plan)) {
+    if (c.startsWith("__")) continue;
+    want[Number(c)] = mark;
+  }
+  if (Object.keys(want).length === 0) return;
+  const wb2 = new ExcelJS.Workbook();
+  await wb2.xlsx.readFile(cfg.file_path);
+  const ws2 = wb2.getWorksheet(cfg.worksheet_name);
+  if (!ws2) throw new Error(`READBACK: worksheet "${cfg.worksheet_name}" hilang setelah save`);
+  for (const [c, mark] of Object.entries(want)) {
+    const got = cellText(ws2.getCell(row, Number(c)));
+    const exp = mark === "✓" ? "✓" : "";
+    if (got !== exp) {
+      throw new Error(`READBACK MISMATCH checkbox @r${row}c${c}: file="${got}" vs tulis="${exp}"`);
+    }
+  }
+}
+
+/** Teks sel header (dukung richText) — dipakai pencarian kolom. */
+function cellHeaderText(ws, row, col) {
+  const v = ws.getCell(row, col).value;
+  if (v === null || v === undefined) return "";
+  if (typeof v === "object" && v.richText) return v.richText.map((r) => r.text).join("");
+  return String(v);
+}
+
 /** Current-state registration untuk job. */
 async function fetchCurrentState(registrationId) {
   const { data: reg, error } = await db.from("event_registrations")
@@ -136,6 +301,7 @@ async function fetchCurrentState(registrationId) {
     ku: reg.ku_override || reg.ku || "",
     status: reg.status,
     race_names: races.join(", "),
+    race_list: races, // array mentah untuk checkbox multi-kolom (NOMOR LOMBA)
     payment_status: pay?.payment_status ?? "BELUM_BAYAR",
     total_amount: pay ? Number(pay.total_amount) : null,
   };
@@ -151,12 +317,17 @@ async function readWorkbookRecords(cfg) {
   const mapping = cfg.mapping ?? {};
   const headerRow = cfg.header_row;
   const colByHeader = {};
+  // Header bisa bertingkat (mis. Form_Pendaftaran: row 12 "NOMOR LOMBA",
+  // row 13 "BEBAS", row 14 "KICK"). Pindai header_row s/d +3 baris.
+  const headerRows = [headerRow, headerRow + 1, headerRow + 2, headerRow + 3];
   for (let c = 1; c <= ws.columnCount; c++) {
-    const v = ws.getCell(headerRow, c).value;
-    const t = typeof v === "object" && v !== null && v.richText ? v.richText.map((r) => r.text).join("") : v;
-    const k = normKey(t);
-    // First-wins: header merged (mis. NAMA = D:E) harus resolve ke kolom paling kiri.
-    if (k && !(k in colByHeader)) colByHeader[k] = c;
+    for (const hr of headerRows) {
+      const v = ws.getCell(hr, c).value;
+      const t = typeof v === "object" && v !== null && v.richText ? v.richText.map((r) => r.text).join("") : v;
+      const k = normKey(t);
+      // First-wins: header merged (mis. NAMA = D:E) harus resolve ke kolom paling kiri.
+      if (k && !(k in colByHeader)) colByHeader[k] = c;
+    }
   }
   const cols = {};
   for (const [field, headerText] of Object.entries(mapping)) {
@@ -396,7 +567,7 @@ async function upsertRegistration(cfg, state, dryRun = false) {
       for (const field of ["ku", "gender", "birth_date"]) {
         const col = cols[field];
         if (!col) continue;
-        const want = String(field === "ku" ? kuShort(state.ku) : field === "gender" ? state.gender : state.birth_date ?? "").trim();
+        const want = String(field === "ku" ? writeKuValue(cfg, state.ku) : field === "gender" ? state.gender : state.birth_date ?? "").trim();
         if (String(existing.values[field] ?? "").trim() !== want) {
           ws.getCell(existing.row, col).value = want || "DATA INCOMPLETE";
           existing.values[field] = want; // snapshot ikut diperbarui → loop guard di bawah tidak false-mismatch
@@ -423,7 +594,7 @@ async function upsertRegistration(cfg, state, dryRun = false) {
       const col = cols[field];
       if (!col || !incompleteFix) continue;
       const cur = String(existing.values[field] ?? "").trim();
-      const want = String(field === "ku" ? kuShort(state.ku) : field === "gender" ? state.gender : state.birth_date ?? "").trim();
+      const want = String(field === "ku" ? writeKuValue(cfg, state.ku) : field === "gender" ? state.gender : state.birth_date ?? "").trim();
       if (!cur && want) { ws.getCell(existing.row, col).value = want; changed = true; }
       else if (cur && want && cur.replace(/\s+/g, "").toUpperCase() !== want.replace(/\s+/g, "").toUpperCase()) {
         return { outcome: "REVIEW_REQUIRED", note: `DATA_MISMATCH ${field} @r${existing.row}: excel="${cur}" db="${want}"` };
@@ -449,12 +620,20 @@ async function upsertRegistration(cfg, state, dryRun = false) {
     }
     if (!dryRun) {
       applyTemplateStyle(ws, cfg, existing.row);
+      // Checkbox multi-kolom (NOMOR LOMBA): segarkan tanda ✓ agar atlet yang
+      // menambah/mengubah nomor lomba ikut ter-update (bukan hanya saat insert).
+      const planUpd = checkboxPlan(cfg, ws, state.race_list);
+      if (planUpd) for (const [c, mark] of Object.entries(planUpd)) {
+        if (c.startsWith("__")) continue;
+        ws.getCell(existing.row, Number(c)).value = mark;
+      }
       // Selalu tulis: normalisasi style saja (tanpa perubahan nilai) juga harus persisten.
       await wb.xlsx.writeFile(cfg.file_path);
       await readBackVerify(cfg, existing.row, cols, {
-        ku: kuShort(state.ku), gender: state.gender,
+        ku: writeKuValue(cfg, state.ku), gender: state.gender,
         birth_date: state.birth_date ?? "", name: String(state.name || "").toUpperCase(),
       });
+      await readBackVerifyCheckbox(cfg, ws, existing.row, planUpd);
       await db.from("excel_sync_row_mappings").upsert({
         configuration_id: cfg.id, registration_id: state.registration_id,
         athlete_id: state.athlete_id, excel_row: existing.row,
@@ -490,16 +669,24 @@ async function upsertRegistration(cfg, state, dryRun = false) {
   if (!dryRun) {
     applyTemplateStyle(ws, cfg, target);
     if (noCol) ws.getCell(target, noCol).value = nextNo;
-    if (cols.ku) ws.getCell(target, cols.ku).value = kuShort(state.ku) || "DATA INCOMPLETE";
+    if (cols.ku) ws.getCell(target, cols.ku).value = writeKuValue(cfg, state.ku) || "DATA INCOMPLETE";
     if (cols.gender) ws.getCell(target, cols.gender).value = state.gender || "DATA INCOMPLETE";
     if (cols.name) ws.getCell(target, cols.name).value = String(state.name || "").toUpperCase();
     if (cols.birth_date) ws.getCell(target, cols.birth_date).value = state.birth_date || "DATA INCOMPLETE";
+    if (cols.birth_year) ws.getCell(target, cols.birth_year).value = birthYear(state.birth_date) || "DATA INCOMPLETE";
+    // Checkbox multi-kolom (NOMOR LOMBA): nyalakan kolom yang cocok.
+    const plan = checkboxPlan(cfg, ws, state.race_list);
+    if (plan) for (const [c, mark] of Object.entries(plan)) {
+      if (c.startsWith("__")) continue;
+      ws.getCell(target, Number(c)).value = mark;
+    }
     ensureKuWidth(ws, cfg, cols);
     await wb.xlsx.writeFile(cfg.file_path);
     await readBackVerify(cfg, target, cols, {
-      ku: kuShort(state.ku), gender: state.gender,
+      ku: writeKuValue(cfg, state.ku), gender: state.gender,
       birth_date: state.birth_date ?? "", name: String(state.name || "").toUpperCase(),
     });
+    await readBackVerifyCheckbox(cfg, ws, target, plan);
     await db.from("excel_sync_row_mappings").upsert({
       configuration_id: cfg.id, registration_id: state.registration_id,
       athlete_id: state.athlete_id, excel_row: target,
