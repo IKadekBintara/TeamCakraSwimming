@@ -30,7 +30,7 @@ export default async function EventsPage({
   for (const r of regs ?? []) regCounts.set(r.event_id, (regCounts.get(r.event_id) ?? 0) + 1);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5 pt-14 lg:pt-0">
+    <div className="mx-auto max-w-6xl space-y-5 ">
       {deleted && (
         <div className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-medium text-white shadow" role="status">
           Event berhasil dihapus permanen.

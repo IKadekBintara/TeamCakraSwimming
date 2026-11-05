@@ -133,7 +133,7 @@ export default async function PerformancePage({
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 pt-14 lg:pt-0">
+    <div className="mx-auto max-w-6xl space-y-4 ">
       <header className="page-header">
         <div>
           <h1 className="page-title">Performance Management</h1>

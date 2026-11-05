@@ -52,7 +52,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col bg-slate-50 dark:bg-navy-950">
+    <main id="main-content" className="login-shell relative flex min-h-screen flex-col">
       {/* Cahaya air yang halus — satu aksen, bukan gradient seluruh halaman */}
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className={`absolute -top-32 left-1/2 h-72 w-[42rem] max-w-[140vw] -translate-x-1/2 rounded-full blur-3xl ${"bg-brand-500/10 dark:bg-brand-500/10"}`} />
@@ -69,14 +69,14 @@ export default function LoginPage() {
 
       {/* CENTER — logo, judul, form */}
       <div className="relative z-10 flex flex-1 items-center justify-center px-4 py-8">
-        <div className="w-full max-w-sm">
+        <div className="w-full max-w-lg">
           <div className="mb-7 text-center">
             <Image
-              src="/brand/team-cakra-logo.png"
+              src="/brand/team-cakra-mark.png"
               alt="Logo TEAM CAKRA SWIMMING"
               width={144}
               height={144}
-              className="mx-auto h-28 w-auto sm:h-32"
+              className="mx-auto h-20 w-auto sm:h-24"
               priority
             />
             <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
@@ -102,7 +102,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="card space-y-4 shadow-lg">
+          <form onSubmit={handleSubmit} className="card space-y-5">
             <div className="space-y-1">
               <h2 className="text-base font-semibold text-navy-900">
                 {mode === "login" ? "Masuk ke akun Anda" : "Buat akun baru"}

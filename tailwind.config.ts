@@ -2,7 +2,7 @@ import type { Config } from "tailwindcss";
 
 /**
  * TEAM CAKRA SWIMMING — Design Tokens
- * Aquatic teal-emerald accent + deep navy surfaces. Single source of truth;
+ * Pool blue accent + warm white and deep navy surfaces. Single source of truth;
  * pages never define their own colors beyond these scales.
  */
 const config: Config = {
@@ -15,20 +15,19 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Aquatic accent — shifted from pure emerald toward pool-water teal,
-        // still recognizably the same brand as the existing UI.
+        // Pool blue from the approved FigCraft redesign.
         brand: {
-          50: "#ecfdf7",
-          100: "#d0fae9",
-          200: "#a4f3d6",
-          300: "#5fe8bd",
-          400: "#2dd4a8",
-          500: "#12b886",
-          600: "#0d9670",
-          700: "#0c785e",
-          800: "#0e5f4d",
-          900: "#0f4e40",
-          950: "#032e26",
+          50: "#eef4ff",
+          100: "#dce8ff",
+          200: "#bdd4ff",
+          300: "#93baff",
+          400: "#6b9cff",
+          500: "#3979ed",
+          600: "#2264db",
+          700: "#1d51b4",
+          800: "#203f88",
+          900: "#203868",
+          950: "#122341",
         },
         // Deep water navy — premium surfaces, headers, dark-mode base.
         navy: {
@@ -46,11 +45,11 @@ const config: Config = {
         },
       },
       boxShadow: {
-        card: "0 1px 2px rgb(11 20 36 / 0.06), 0 4px 16px rgb(11 20 36 / 0.06)",
+        card: "0 1px 3px rgb(11 20 36 / 0.02)",
         "card-dark": "0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.35)",
       },
       borderRadius: {
-        xl: "0.875rem",
+        xl: "1rem",
       },
     },
   },

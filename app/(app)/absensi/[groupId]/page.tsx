@@ -54,7 +54,7 @@ export default async function AbsensiGroupPage({
       .single();
     if (error) {
       return (
-        <div className="mx-auto max-w-2xl pt-14 lg:pt-0">
+        <div className="mx-auto max-w-2xl ">
           <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
             Gagal membuat sesi: {error.message}
           </p>
@@ -89,7 +89,7 @@ export default async function AbsensiGroupPage({
   for (const a of existing ?? []) initial[a.athlete_id] = a.status;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4 pt-14 lg:pt-0">
+    <div className="mx-auto max-w-2xl space-y-4 ">
       <div>
         <h1 className="text-2xl font-bold">{group.name}</h1>
         <p className="text-sm text-slate-500">

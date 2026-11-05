@@ -25,7 +25,7 @@ export default async function PembayaranSayaPage() {
   const totalSisa = rows.reduce((s, p) => s + Number(p.remaining_amount || 0), 0);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5 pt-14 lg:pt-0">
+    <div className="mx-auto max-w-3xl space-y-5 ">
       <div>
         <h1 className="text-2xl font-bold">Pembayaran Saya</h1>
         <p className="text-sm text-slate-500">{athlete?.full_name ?? ""}</p>

@@ -59,7 +59,7 @@ export default async function AbsensiPage({
     .limit(14);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-5 pt-14 lg:pt-0">
+    <div className="mx-auto max-w-4xl space-y-5 ">
       <header className="page-header">
         <div>
           <h1 className="page-title">Absensi</h1>

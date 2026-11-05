@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { getAuth } from "@/lib/supabase/auth-helper";
 import { redirect } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
-import NotificationBell from "@/components/NotificationBell";
+import AppHeader from "@/components/AppHeader";
 import type { Role } from "@/types";
 
 export const metadata: Metadata = {
@@ -24,15 +24,12 @@ export default async function AppLayout({
   const name = profile?.full_name || user.email || "Pengguna";
 
   return (
-    <div className="flex min-h-screen">
+    <div className="workspace-shell">
       <Sidebar role={role} userName={name} />
-      <main className="relative flex-1 overflow-x-hidden p-4 pb-24 md:p-6 lg:pb-6">
-        {/* Bell di desktop: pojok kanan atas konten. Di mobile bell pindah ke top-bar (Sidebar) */}
-        <div className="absolute right-4 top-4 z-40 hidden md:right-6 md:top-6 lg:block">
-          <NotificationBell />
-        </div>
-        {children}
-      </main>
+      <div className="min-w-0 flex-1">
+        <AppHeader role={role} userName={name} />
+        <main id="main-content" className="workspace-content">{children}</main>
+      </div>
     </div>
   );
 }

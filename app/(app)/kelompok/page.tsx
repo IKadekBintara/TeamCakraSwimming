@@ -29,7 +29,7 @@ export default async function KelompokPage() {
   const leaderNameById = new Map((leaderProfiles ?? []).map((p) => [p.id, p.full_name]));
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5 pt-14 lg:pt-0">
+    <div className="mx-auto max-w-6xl space-y-5 ">
       <div>
         <h1 className="text-2xl font-bold">Kelompok Latihan</h1>
         <p className="text-sm text-slate-500">

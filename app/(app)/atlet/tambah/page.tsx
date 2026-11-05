@@ -17,7 +17,7 @@ export default async function TambahAtletPage() {
     .order("full_name");
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4 pt-14 lg:pt-0">
+    <div className="mx-auto max-w-2xl space-y-4 ">
       <h1 className="text-2xl font-bold">Tambah Atlet</h1>
       <AthleteForm groups={groups ?? []} parents={parents ?? []} mode="create" />
     </div>

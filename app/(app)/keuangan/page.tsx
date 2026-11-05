@@ -75,7 +75,7 @@ export default async function FinancePage({ searchParams }: { searchParams: { q?
     : (payments ?? [])
   ).filter((p) => p.payment_status === "MENUNGGU_VERIFIKASI");
 
-  return <div className="mx-auto max-w-6xl space-y-5 pt-14 lg:pt-0">
+  return <div className="mx-auto max-w-6xl space-y-5 ">
     <header className="page-header">
       <div>
         <h1 className="page-title">Payment Center</h1>

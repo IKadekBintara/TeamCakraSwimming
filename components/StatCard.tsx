@@ -11,12 +11,12 @@ export default function StatCard({
   tone?: string;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-card">
-      <p className="text-sm font-medium text-slate-500">{label}</p>
-      <p className={`mt-0.5 text-[20px] font-bold leading-tight tracking-tight text-navy-900 [overflow-wrap:anywhere] sm:text-[28px] ${tone ?? ""}`}>
+    <div className="stat-card">
+      <p className="stat-label">{label}</p>
+      <p className={`stat-value [overflow-wrap:anywhere] ${tone ?? ""}`}>
         {value}
       </p>
-      {hint && <p className="mt-0.5 text-xs text-slate-400">{hint}</p>}
+      {hint && <p className="mt-3 text-xs leading-relaxed text-slate-500">{hint}</p>}
     </div>
   );
 }

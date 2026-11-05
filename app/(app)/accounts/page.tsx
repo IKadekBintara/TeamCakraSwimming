@@ -13,5 +13,5 @@ export default async function AccountsPage() {
   if (!user) redirect("/login");
   const { data: profile } = await supabase.from("profiles").select("role, account_status").eq("id", user.id).maybeSingle();
   if (profile?.role !== "admin" || profile.account_status !== "ACTIVE") redirect("/dashboard");
-  return <div className="mx-auto max-w-7xl space-y-5 pt-14 lg:pt-0"><AccountManagement /></div>;
+  return <div className="mx-auto max-w-7xl space-y-5 "><AccountManagement /></div>;
 }

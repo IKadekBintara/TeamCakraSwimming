@@ -46,7 +46,7 @@ export default async function LaporanPage({
   const rate = totalMarks > 0 ? Math.round((totalPresent / totalMarks) * 100) : 0;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 pt-14 lg:pt-0">
+    <div className="mx-auto max-w-5xl space-y-5 ">
       <div>
         <h1 className="text-2xl font-bold">Laporan</h1>
         <p className="text-sm text-slate-500">Rekap kehadiran per periode</p>

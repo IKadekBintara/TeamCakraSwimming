@@ -9,7 +9,7 @@ export default async function SettingsPage() {
   const { user } = await getAuth();
   const { data: profile } = user ? await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle() : { data: null };
   const { data: settings } = await supabase.from("payment_settings").select("bank_name,account_number,account_name,ewallet_name,ewallet_number,instructions,bank_transfer_enabled,ewallet_enabled,cash_enabled").eq("id", true).maybeSingle();
-  return <div className="mx-auto max-w-2xl space-y-5 pt-14 lg:pt-0">
+  return <div className="mx-auto max-w-2xl space-y-5 ">
     <div><h1 className="text-2xl font-bold">Settings</h1><p className="text-sm text-slate-500">Konfigurasi aplikasi dan pembayaran event.</p></div>
     {profile?.role === "admin" ? <PaymentSettingsForm initial={settings} /> : <div className="card text-sm text-slate-600">Payment settings hanya dapat diubah oleh Admin.</div>}
     <div className="card space-y-3 text-sm"><h2 className="font-semibold">Informasi Klub</h2><dl className="space-y-1.5"><div className="flex justify-between"><dt className="text-slate-500">Nama</dt><dd className="font-medium">TEAM CAKRA SWIMMING</dd></div><div className="flex justify-between"><dt className="text-slate-500">Aplikasi</dt><dd className="font-medium">TEAM CAKRA SWIMMING MANAGEMENT SYSTEM</dd></div><div className="flex justify-between"><dt className="text-slate-500">Versi</dt><dd className="font-medium">0.1.0</dd></div></dl></div>

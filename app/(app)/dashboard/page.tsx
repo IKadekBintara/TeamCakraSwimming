@@ -318,7 +318,7 @@ export default async function DashboardPage() {
   ];
 
   return (
-    <div className="section-gap mx-auto max-w-6xl space-y-8 pt-14 lg:pt-0">
+    <div className="section-gap mx-auto max-w-6xl space-y-8 ">
       {/* Header */}
       <header className="page-header !mb-0">
         <div>

@@ -78,7 +78,7 @@ export default async function AtletDetailPage({
   const group = membership?.training_groups as { name?: string; location?: string } | null;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-5 pt-14 lg:pt-0">
+    <div className="mx-auto max-w-4xl space-y-5 ">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-4">
           <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-brand-100 text-2xl text-brand-700">

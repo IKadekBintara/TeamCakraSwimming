@@ -135,11 +135,11 @@ export default function ExcelSyncPage() {
   }
 
   if (!settings || configs === null) {
-    return <div className="pt-14 lg:pt-0"><div className="h-24 animate-pulse rounded-xl bg-slate-100 dark:bg-navy-800" /></div>;
+    return <div className=""><div className="h-24 animate-pulse rounded-xl bg-slate-100 dark:bg-navy-800" /></div>;
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 pt-14 lg:pt-0">
+    <div className="mx-auto max-w-5xl space-y-5 ">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Sinkronisasi Excel</h1>

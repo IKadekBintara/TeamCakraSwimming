@@ -20,7 +20,7 @@ export default async function ProfilSayaPage() {
 
   if (!athlete) {
     return (
-      <div className="mx-auto max-w-3xl space-y-5 pt-14 lg:pt-0">
+      <div className="mx-auto max-w-3xl space-y-5 ">
         <h1 className="text-2xl font-bold">Profil Saya</h1>
         <div className="card">
           <p className="text-sm text-slate-500">
@@ -41,7 +41,7 @@ export default async function ProfilSayaPage() {
   const group = membership?.training_groups as { name?: string; location?: string } | null;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5 pt-14 lg:pt-0">
+    <div className="mx-auto max-w-3xl space-y-5 ">
       <div className="flex items-center gap-4">
         <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-brand-100 text-2xl text-brand-700">
           {athlete.photo_url ? (

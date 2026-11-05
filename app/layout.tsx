@@ -8,16 +8,15 @@ export const metadata: Metadata = {
   },
   description: "TEAM CAKRA SWIMMING — sistem manajemen atlet, absensi, event, pendaftaran, dan pembayaran.",
   icons: {
-    icon: "/brand/team-cakra-logo.png",
-    shortcut: "/brand/team-cakra-logo.png",
-    apple: "/brand/team-cakra-logo.png",
+    icon: "/brand/team-cakra-mark.png",
+    shortcut: "/brand/team-cakra-mark.png",
+    apple: "/brand/team-cakra-mark.png",
   },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
 };
 
 export default function RootLayout({
@@ -28,7 +27,8 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: "try{if(localStorage.getItem('team-cakra-theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}" }} />
       </head>
-      <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
+      <body className="min-h-screen text-slate-900 antialiased">
+        <a href="#main-content" className="skip-link">Lewati ke konten</a>
         {children}
       </body>
     </html>

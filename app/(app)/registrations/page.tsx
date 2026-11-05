@@ -178,7 +178,7 @@ export default async function RegistrationsPage({
     return `/registrations?${sp.toString()}`;
   };
 
-  return <div className="mx-auto max-w-6xl space-y-4 pt-14 lg:pt-0">
+  return <div className="mx-auto max-w-6xl space-y-4 ">
     <header>
       <h1 className="text-2xl font-bold">Pendaftaran Event</h1>
       <p className="text-sm text-slate-500">Total {count ?? 0} pendaftaran · Pembayaran manual terverifikasi admin.</p>

@@ -26,7 +26,7 @@ export default async function EditAtletPage({
   if (!athlete) notFound();
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4 pt-14 lg:pt-0">
+    <div className="mx-auto max-w-2xl space-y-4 ">
       <h1 className="text-2xl font-bold">Edit Atlet</h1>
       <AthleteForm
         groups={groups ?? []}

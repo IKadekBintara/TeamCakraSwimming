@@ -20,7 +20,7 @@ export default async function JadwalPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 pt-14 lg:pt-0">
+    <div className="mx-auto max-w-5xl space-y-5 ">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Jadwal Latihan</h1>

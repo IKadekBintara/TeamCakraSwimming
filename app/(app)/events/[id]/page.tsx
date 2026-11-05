@@ -54,7 +54,7 @@ export default async function EventDetailPage({ params }: { params: { id: string
   for (const m of memberships ?? []) cakraOf.set(m.athlete_id, (m.training_groups as { name?: string } | null)?.name ?? "");
   const formAthletes = (athletes ?? []).map((a) => ({ ...a, cakra: cakraOf.get(a.id) ?? null }));
 
-  return <div className="mx-auto max-w-6xl space-y-5 pt-14 lg:pt-0">
+  return <div className="mx-auto max-w-6xl space-y-5 ">
     <Link href="/events" className="text-sm text-brand-700 hover:underline">← Semua Events</Link>
     <div className="card">
       <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h1 className="text-2xl font-bold">{event.name}</h1><p className="mt-1 text-sm text-slate-500 break-words">{event.event_date} · {event.location || "Lokasi belum diatur"}</p></div><div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end"><span className={`badge self-start sm:self-end ${event.status === "OPEN" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{event.status}</span>{canManage && <EventStatusActions eventId={event.id} status={event.status} />}</div></div>

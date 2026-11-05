@@ -20,7 +20,7 @@ export default async function PerformanceSayaPage() {
     .limit(200);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5 pt-14 lg:pt-0">
+    <div className="mx-auto max-w-3xl space-y-5 ">
       <div>
         <h1 className="text-2xl font-bold">Performance Saya</h1>
         <p className="text-sm text-slate-500">{athlete?.full_name ?? ""}</p>

@@ -15,7 +15,7 @@ export default async function UsersPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 pt-14 lg:pt-0">
+    <div className="mx-auto max-w-5xl space-y-5 ">
       <div>
         <h1 className="text-2xl font-bold">Users</h1>
         <p className="text-sm text-slate-500">

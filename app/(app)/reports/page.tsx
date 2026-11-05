@@ -151,7 +151,7 @@ export default async function ReportsPage({
   );
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 pt-14 lg:pt-0">
+    <div className="mx-auto max-w-6xl space-y-4 ">
       <header className="page-header">
         <div>
           <h1 className="page-title">Report Center</h1>
