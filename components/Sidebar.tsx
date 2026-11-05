@@ -41,7 +41,7 @@ function NavLinkRow({ item, pathname, onNavigate, touch = false, indented = fals
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
       tabIndex={tabbable ? undefined : -1}
-      className={`flex items-center gap-3 rounded-lg ${indented ? "pl-9" : "px-3"} pr-3 ${touch ? "min-h-11 py-2.5" : "min-h-11 py-2.5"} text-[13px] transition-colors ${
+      className={`flex items-center gap-3 rounded-lg ${indented ? "pl-9" : "px-3"} pr-3 ${touch ? "min-h-11 py-2.5" : "min-h-8 py-1.5"} text-[13px] transition-colors ${
         active
           ? "bg-brand-50 font-semibold text-brand-700 dark:bg-brand-900/40 dark:text-brand-200"
           : prominent
@@ -49,7 +49,7 @@ function NavLinkRow({ item, pathname, onNavigate, touch = false, indented = fals
             : "font-medium text-slate-600 hover:bg-brand-50 hover:text-brand-800 dark:text-slate-300 dark:hover:bg-slate-100/5"
       }`}
     >
-      <item.icon className={`h-4 w-4 shrink-0 ${active ? "" : prominent ? "text-brand-600 dark:text-brand-400" : ""}`} />
+      {touch && <item.icon className={`h-4 w-4 shrink-0 ${active ? "" : prominent ? "text-brand-600 dark:text-brand-400" : ""}`} />}
       {item.label}
     </Link>
   );
@@ -144,6 +144,20 @@ function NavList({ sections, pathname, openGroups, toggleGroup, onNavigate, touc
   variant: "desktop" | "mobile";
   focusable?: boolean;
 }) {
+  if (variant === "desktop") {
+    return (
+      <div className="space-y-3">
+        {sections.map((group) => (
+          <section key={group.id}>
+            {group.label && <p className="mb-1 px-3 pt-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-500">{group.label}</p>}
+            <div className="space-y-0.5">
+              {group.items.map((item) => <NavLinkRow key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} tabbable={focusable} />)}
+            </div>
+          </section>
+        ))}
+      </div>
+    );
+  }
   return (
     <div className="space-y-3">
       {sections.map((g, gi) => (
@@ -258,15 +272,12 @@ export default function Sidebar({ role, userName }: { role: Role; userName: stri
         </div>
 
         {/* Internal scroll: menu panjang tidak mendorong account section keluar layar */}
-        <nav aria-label="Navigasi utama" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5">
+        <nav aria-label="Navigasi utama" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
           <NavList sections={sections} pathname={pathname} openGroups={openGroups} toggleGroup={toggleGroup} variant="desktop" />
         </nav>
 
         {/* Account section — selalu terlihat, tak tertutup scroll */}
-        <div className="border-t border-slate-100 p-3">
-          <p className="mb-1 truncate px-2 text-xs text-slate-500">{userName}</p>
-          <p className="mb-2 px-2 text-xs font-medium uppercase text-brand-700">{role}</p>
-          <div className="mb-2 px-2"><ThemeToggle compact /></div>
+        <div className="p-4 pt-2">
           <button onClick={logout} className="btn-secondary w-full text-sm">
             <LogOut className="h-4 w-4" /> Keluar
           </button>
