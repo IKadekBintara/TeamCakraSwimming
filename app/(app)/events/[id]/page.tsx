@@ -59,6 +59,11 @@ export default async function EventDetailPage({ params }: { params: { id: string
     <div className="card">
       <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h1 className="text-2xl font-bold">{event.name}</h1><p className="mt-1 text-sm text-slate-500 break-words">{event.event_date} · {event.location || "Lokasi belum diatur"}</p></div><div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end"><span className={`badge self-start sm:self-end ${event.status === "OPEN" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{event.status}</span>{canManage && <EventStatusActions eventId={event.id} status={event.status} />}</div></div>
       {profile?.role === "admin" && <div className="mt-2 flex justify-stretch sm:justify-end"><PermanentEventDelete eventId={event.id} eventName={event.name} canManage /></div>}
+      {canManage && (
+        <Link href={`/events/${event.id}/surat-dispensasi`} className="btn-secondary mt-4 inline-flex">
+          Buat surat dispensasi
+        </Link>
+      )}
       <p className="mt-4 text-sm text-slate-600">{event.description || "Tidak ada deskripsi."}</p>
       <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm"><span>Biaya nomor (uang event): <strong>{rupiah(event.fee_per_entry)}</strong></span><span className="text-slate-500">Admin: <strong>{rupiah(event.admin_fee)}</strong></span><span>Deadline: <strong>{event.registration_deadline || "—"}</strong></span></div>
     </div>
