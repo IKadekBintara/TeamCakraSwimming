@@ -12,8 +12,9 @@ import { rupiah } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
 
-export default async function EventDetailPage({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+export default async function EventDetailPage({ params: routeParams }: { params: Promise<{ id: string }> }) {
+  const params = await routeParams;
+  const supabase = await createClient();
   const { user } = await getAuth();
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user?.id ?? "").maybeSingle();
   const canManage = profile?.role === "admin" || profile?.role === "operator";

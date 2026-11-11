@@ -1,3 +1,4 @@
+import { wibToday } from "@/lib/notifications/time";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { ATTENDANCE_LABELS } from "@/types";
@@ -5,20 +6,21 @@ import { ATTENDANCE_LABELS } from "@/types";
 export const dynamic = "force-dynamic";
 
 function startOfWeek(d: Date) {
-  const day = (d.getDay() + 6) % 7; // Senin sebagai awal minggu
+  const day = (d.getUTCDay() + 6) % 7; // Senin sebagai awal minggu
   const s = new Date(d);
-  s.setDate(d.getDate() - day);
+  s.setUTCDate(d.getUTCDate() - day);
   return s.toISOString().slice(0, 10);
 }
 
 export default async function AbsensiPage({
-  searchParams,
+  searchParams: routeSearchParams,
 }: {
-  searchParams: { from?: string; to?: string; group?: string };
+  searchParams: Promise<{ from?: string; to?: string; group?: string }>;
 }) {
-  const supabase = createClient();
-  const today = new Date().toISOString().slice(0, 10);
-  const defaultFrom = startOfWeek(new Date());
+  const searchParams = await routeSearchParams;
+  const supabase = await createClient();
+  const today = wibToday();
+  const defaultFrom = startOfWeek(new Date(today + "T00:00:00Z"));
   const from = searchParams.from ?? defaultFrom;
   const to = searchParams.to ?? today;
   const fGroup = searchParams.group ?? "ALL";

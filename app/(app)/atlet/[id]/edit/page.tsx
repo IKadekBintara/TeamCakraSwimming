@@ -5,11 +5,12 @@ import { notFound } from "next/navigation";
 export const dynamic = "force-dynamic";
 
 export default async function EditAtletPage({
-  params,
+  params: routeParams,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const supabase = createClient();
+  const params = await routeParams;
+  const supabase = await createClient();
 
   const [{ data: athlete }, { data: groups }, { data: parents }, { data: membership }] = await Promise.all([
     supabase.from("athletes").select("*").eq("id", params.id).single(),

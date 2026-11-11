@@ -1,3 +1,4 @@
+import { APP_TZ, wibToday } from "@/lib/notifications/time";
 import { createClient } from "@/lib/supabase/server";
 import { getAuth } from "@/lib/supabase/auth-helper";
 import StatCard from "@/components/StatCard";
@@ -21,7 +22,7 @@ function buildGrowth(
   athletes: { join_date: string | null; left_at: string | null; status: string }[],
   months: number
 ): GrowthPoint[] {
-  const now = new Date();
+  const now = new Date(wibToday() + "T00:00:00");
   const points: GrowthPoint[] = [];
   for (let i = months - 1; i >= 0; i--) {
     const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
@@ -69,26 +70,24 @@ function queueTone(failed: number, pending: number) {
 }
 
 export default async function DashboardPage() {
-  const supabase = createClient();
-  const today = new Date().toISOString().slice(0, 10);
-  const todayDow = new Date().getDay();
+  const supabase = await createClient();
+  const today = wibToday();
+  const todayDow = new Date(today + "T00:00:00Z").getUTCDay();
   const now = new Date();
-  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-  const yearStart = `${now.getFullYear()}-01-01`;
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const yearStart = `${today.slice(0, 4)}-01-01`;
 
-  const { data: allAthletes } = await supabase.from("athletes").select("id, status, join_date, left_at");
-  const groups = await getCakraGroups();
-  const canonicalNames = groups.map((g) => g.name);
   const [
+    { data: allAthletes }, groups, { profile: currentProfile },
     { data: todaySessions },
     { data: members },
     { data: allEvents },
     { data: eventPayments },
     { data: registrations },
     { data: auditLogs },
-    { data: currentProfile },
     { data: perfRows },
   ] = await Promise.all([
+    supabase.from("athletes").select("id, status, join_date, left_at"), getCakraGroups(), getAuth(),
     supabase
       .from("training_sessions")
       .select("id, session_date, start_time, end_time, location, group_id, training_groups(name)")
@@ -98,9 +97,10 @@ export default async function DashboardPage() {
     supabase.from("event_payments").select("event_id, athlete_id, registration_fee, admin_fee, total_amount, amount_paid, payment_status"),
     supabase.from("event_registrations").select("id, event_id"),
     supabase.from("audit_logs").select("id, action, entity, created_at, profiles(full_name)").order("created_at", { ascending: false }).limit(8),
-    supabase.from("profiles").select("role, full_name").eq("id", ((await getAuth()).user?.id ?? "")).maybeSingle(),
     supabase.from("athlete_performance_results").select("id, athlete_id, stroke, distance, time_cs, recorded_at, athletes(cakra)"),
   ]);
+
+  const canonicalNames = groups.map((g) => g.name);
 
   // Communication overview (staff only) — dihitung terpisah agar non-staff tak membebani
   const isStaff = ["admin", "operator"].includes((currentProfile?.role as string) ?? "");
@@ -322,10 +322,10 @@ export default async function DashboardPage() {
       {/* Header */}
       <header className="page-header !mb-0">
         <div>
-          <p className="page-title">{greeting(now.getHours())}, {firstName}</p>
+          <p className="page-title">{greeting(Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hourCycle: "h23", timeZone: APP_TZ }).format(now)))}, {firstName}</p>
           <p className="mt-0.5 text-sm font-medium text-slate-500">TEAM CAKRA SWIMMING</p>
           <p className="page-subtitle">
-            {DAY_NAMES[todayDow]}, {now.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+            {DAY_NAMES[todayDow]}, {now.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric", timeZone: APP_TZ })}
             {scopedRole === "ketua_kelompok" && <> • <span className="font-medium text-brand-700">Ketua Kelompok</span></>}
           </p>
         </div>

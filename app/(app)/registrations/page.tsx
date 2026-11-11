@@ -58,14 +58,15 @@ function payRank(status: string): number {
 }
 
 export default async function RegistrationsPage({
-  searchParams,
+  searchParams: routeSearchParams,
 }: {
-  searchParams: {
+  searchParams: Promise<{
     q?: string; event?: string; group?: string; ku?: string;
     race?: string; pay?: string; page?: string; sort?: string;
-  };
+  }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await routeSearchParams;
+  const supabase = await createClient();
   const q = searchParams.q?.trim() ?? "";
   const fEvent = searchParams.event ?? "ALL";
   const fGroup = searchParams.group ?? "ALL";

@@ -12,7 +12,7 @@ const STATUSES = ["ACTIVE", "INACTIVE", "SUSPENDED", "DELETED"] as const;
 type AccountStatus = (typeof STATUSES)[number];
 
 async function adminContext() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "UNAUTHENTICATED" as const };
   const { data: profile } = await supabase.from("profiles").select("id, full_name, role, account_status").eq("id", user.id).maybeSingle();

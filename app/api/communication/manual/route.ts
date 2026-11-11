@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getAuth } from "@/lib/supabase/auth-helper";
 import { createServiceClient } from "@/lib/supabase/service";
 import { notifyInApp } from "@/lib/notifications/service";
 import { rateLimit } from "@/lib/rate-limit";
@@ -15,16 +15,10 @@ const ALLOWED_ROLES = ["parent", "athlete", "coach", "group_leader", "ketua_kelo
 export async function POST(req: NextRequest) {
   const rl = rateLimit(req, "comm-manual", 10);
   if (rl) return rl;
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, profile } = await getAuth();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (!profile || !["admin", "operator"].includes(profile.role)) {
+  if (profile?.account_status !== "ACTIVE" || !["admin", "operator"].includes(profile.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

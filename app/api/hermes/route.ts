@@ -1,3 +1,4 @@
+import { wibToday } from "@/lib/notifications/time";
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { normalizeWhatsapp } from "@/types";
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
 
   const action = String(body.action ?? "");
   const supabase = createServiceClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = wibToday();
 
   try {
     switch (action) {
@@ -100,7 +101,7 @@ export async function POST(req: NextRequest) {
       }
 
       case "today_sessions": {
-        const dow = new Date().getDay();
+        const dow = new Date(today + "T00:00:00Z").getUTCDay();
         const { data, error } = await supabase
           .from("training_schedules")
           .select("start_time, end_time, location, training_groups(name)")

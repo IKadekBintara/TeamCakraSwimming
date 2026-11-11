@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 async function admin() {
-  const client = createClient();
+  const client = await createClient();
   const { data: { user } } = await client.auth.getUser();
   if (!user) return { error: 401 as const };
   const { data: profile } = await client.from("profiles").select("role, account_status").eq("id", user.id).maybeSingle();
@@ -139,11 +139,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 /** POST: aksi diagnostik — enqueue job test_connection / dry_run.
  *  Sengaja TIDAK memerlukan sync enabled: diagnostik justru untuk memeriksa kesiapan. */
-export async function POST(req: NextRequest, ctx2: { params: { id: string } }) {
+export async function POST(req: NextRequest, ctx2: { params: Promise<{ id: string }> }) {
   const rid = newRequestId("mutation");
   const ctx = await admin();
   if ("error" in ctx) return fail(ctx.error === 401 ? "Sesi login diperlukan" : "Admin only", ctx.error, rid);
-  const { id } = ctx2.params;
+  const { id } = await ctx2.params;
   const b = await req.json().catch(() => null);
   if (!b || !["test_connection", "dry_run"].includes(b.action)) return fail("action harus test_connection | dry_run", 400, rid);
   const db = ctx.service;

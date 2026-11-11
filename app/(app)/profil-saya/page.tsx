@@ -1,3 +1,5 @@
+import PortalAthletePicker from "@/components/PortalAthletePicker";
+import { getPortalAthlete } from "@/lib/portal-athletes";
 import { getProfile } from "@/lib/page-guard";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -6,17 +8,19 @@ import { ATTENDANCE_LABELS } from "@/types";
 export const dynamic = "force-dynamic";
 
 /** PROFIL SAYA — atlet melihat data dirinya sendiri via RLS (athletes_self_select). */
-export default async function ProfilSayaPage() {
+export default async function ProfilSayaPage({ searchParams }: { searchParams: Promise<{ atlet?: string }> }) {
   const profile = await getProfile();
   if (!profile) redirect("/login");
   if (!["athlete", "parent"].includes((profile.role as string) ?? "")) redirect("/atlet");
 
-  const supabase = createClient();
-  const { data: athlete } = await supabase
+  const supabase = await createClient();
+  const { atlet } = await searchParams;
+  const { athletes, selected } = await getPortalAthlete(supabase, atlet);
+  const { data: athlete } = selected ? await supabase
     .from("athletes")
     .select("*")
-    .limit(1)
-    .maybeSingle();
+    .eq("id", selected.id)
+    .maybeSingle() : { data: null };
 
   if (!athlete) {
     return (
@@ -60,6 +64,8 @@ export default async function ProfilSayaPage() {
         </div>
       </div>
 
+      <PortalAthletePicker athletes={athletes} selected={athlete.id} path="/profil-saya" />
+
       <div className="grid gap-4 md:grid-cols-2">
         <div className="card space-y-2">
           <h2 className="font-semibold">Data Diri</h2>
@@ -89,7 +95,7 @@ export default async function ProfilSayaPage() {
 }
 
 async function RiwayatSingkat({ athleteId }: { athleteId: string }) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: attendance } = await supabase
     .from("attendance")
     .select("id, status, training_sessions(session_date)")

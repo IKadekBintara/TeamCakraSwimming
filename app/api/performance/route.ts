@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   const rlPost = rateLimit(req, "performance-post", 30);
   if (rlPost) return rlPost;
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return bad("Unauthorized", 401);
 
@@ -100,7 +100,7 @@ export async function PATCH(req: NextRequest) {
   const rlPatch = rateLimit(req, "performance-patch", 30);
   if (rlPatch) return rlPatch;
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return bad("Unauthorized", 401);
 
@@ -170,7 +170,7 @@ export async function DELETE(req: NextRequest) {
   const rlDelete = rateLimit(req, "performance-delete", 30);
   if (rlDelete) return rlDelete;
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return bad("Unauthorized", 401);
 

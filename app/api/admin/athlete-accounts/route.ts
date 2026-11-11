@@ -1,3 +1,4 @@
+import { wibToday } from "@/lib/notifications/time";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -21,7 +22,7 @@ function responseError(message: string, status = 400) {
 }
 
 async function adminContext() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "UNAUTHENTICATED" as const };
   const { data: profile } = await supabase.from("profiles").select("role, account_status").eq("id", user.id).maybeSingle();
@@ -98,7 +99,7 @@ export async function PATCH(request: NextRequest) {
   const { data: athlete } = await service.from("athletes").select("id, full_name, status, user_id, left_at").eq("id", athleteId).maybeSingle();
   if (!athlete) return responseError("Atlet tidak ditemukan", 404);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = wibToday();
 
   if (action === "mark_left") {
     if (athlete.status !== "ACTIVE") return responseError("Atlet sudah berstatus non-aktif");

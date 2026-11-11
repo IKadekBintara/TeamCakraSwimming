@@ -48,7 +48,7 @@ export default function PaymentVerification({ payments }: { payments: Array<{ id
             </div>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            {p.payment_proof && <a href={p.payment_proof} target="_blank" rel="noreferrer" className="btn-secondary text-sm">Lihat Bukti</a>}
+            {p.payment_proof && <a href={`/api/payment-proofs/${p.id}`} target="_blank" rel="noreferrer" className="btn-secondary text-sm">Lihat Bukti</a>}
             <input
               className="input h-9 max-w-xs flex-1 text-xs"
               placeholder="Tambah catatan (opsional)…"

@@ -1,4 +1,5 @@
 "use client";
+import { wibToday } from "@/lib/notifications/time";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -24,7 +25,7 @@ export default function GroupMembers({
   async function addMember() {
     if (!addId) return;
     setBusy(true);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = wibToday();
     await supabase.from("training_group_members").insert({
       group_id: groupId, athlete_id: addId, joined_at: today,
     });
@@ -37,7 +38,7 @@ export default function GroupMembers({
     setBusy(true);
     await supabase
       .from("training_group_members")
-      .update({ left_at: new Date().toISOString().slice(0, 10) })
+      .update({ left_at: wibToday() })
       .eq("id", memberId);
     setBusy(false);
     router.refresh();
@@ -46,7 +47,7 @@ export default function GroupMembers({
   async function moveMember(memberId: string, athleteId: string, targetGroup: string) {
     if (!targetGroup) return;
     setBusy(true);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = wibToday();
     await supabase.from("training_group_members").update({ left_at: today }).eq("id", memberId);
     await supabase.from("training_group_members").insert({
       group_id: targetGroup, athlete_id: athleteId, joined_at: today,

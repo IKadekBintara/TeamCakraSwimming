@@ -5,7 +5,7 @@ import PaymentSettingsForm from "@/components/PaymentSettingsForm";
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { user } = await getAuth();
   const { data: profile } = user ? await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle() : { data: null };
   const { data: settings } = await supabase.from("payment_settings").select("bank_name,account_number,account_name,ewallet_name,ewallet_number,instructions,bank_transfer_enabled,ewallet_enabled,cash_enabled").eq("id", true).maybeSingle();

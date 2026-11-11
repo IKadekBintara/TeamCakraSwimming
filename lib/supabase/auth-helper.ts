@@ -7,7 +7,7 @@ import { createClient } from "./server";
  * getUser() ke Supabase — bukan 3–4 round-trip berurutan per klik menu.
  */
 export const getAuth = cache(async () => {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

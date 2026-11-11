@@ -5,7 +5,7 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 
 export default async function JadwalPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: schedules } = await supabase
     .from("training_schedules")

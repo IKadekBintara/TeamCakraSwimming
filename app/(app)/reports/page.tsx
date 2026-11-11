@@ -1,3 +1,4 @@
+import { wibToday } from "@/lib/notifications/time";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { rupiah } from "@/lib/events";
@@ -24,14 +25,15 @@ function qs(base: string, params: Record<string, string>) {
 }
 
 export default async function ReportsPage({
-  searchParams,
+  searchParams: routeSearchParams,
 }: {
-  searchParams: { from?: string; to?: string; event?: string; group?: string; ku?: string; pay?: string };
+  searchParams: Promise<{ from?: string; to?: string; event?: string; group?: string; ku?: string; pay?: string }>;
 }) {
-  const supabase = createClient();
-  const now = new Date();
-  const from = searchParams.from ?? `${now.getFullYear()}-01-01`;
-  const to = searchParams.to ?? now.toISOString().slice(0, 10);
+  const searchParams = await routeSearchParams;
+  const supabase = await createClient();
+  const today = wibToday();
+  const from = searchParams.from ?? `${today.slice(0, 4)}-01-01`;
+  const to = searchParams.to ?? today;
   const fEvent = searchParams.event ?? "ALL";
   const fGroup = searchParams.group ?? "ALL";
   const fPay = searchParams.pay ?? "ALL";

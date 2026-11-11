@@ -6,7 +6,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 export const dynamic = "force-dynamic";
 
 async function adminContext() {
-  const client = createClient();
+  const client = await createClient();
   const { data: { user } } = await client.auth.getUser();
   if (!user) return { error: 401 as const };
   const { data: profile } = await client.from("profiles").select("role, account_status").eq("id", user.id).maybeSingle();

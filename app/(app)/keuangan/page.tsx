@@ -18,8 +18,9 @@ function Metric({ label, value, accent, hint }: { label: string; value: string; 
   );
 }
 
-export default async function FinancePage({ searchParams }: { searchParams: { q?: string; status?: string; group?: string } }) {
-  const supabase = createClient();
+export default async function FinancePage({ searchParams: routeSearchParams }: { searchParams: Promise<{ q?: string; status?: string; group?: string }> }) {
+  const searchParams = await routeSearchParams;
+  const supabase = await createClient();
   const q = searchParams.q?.trim() ?? "";
   const status = searchParams.status ?? "ALL";
   const group = searchParams.group ?? "ALL";

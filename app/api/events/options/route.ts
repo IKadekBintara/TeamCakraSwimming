@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 /** Daftar event untuk picker (semua status; jumlah pendaftar dihitung). */
 export async function GET() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

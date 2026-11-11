@@ -1,3 +1,4 @@
+import { wibToday } from "@/lib/notifications/time";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import AttendanceSheet from "@/components/AttendanceSheet";
@@ -5,14 +6,16 @@ import AttendanceSheet from "@/components/AttendanceSheet";
 export const dynamic = "force-dynamic";
 
 export default async function AbsensiGroupPage({
-  params,
-  searchParams,
+  params: routeParams,
+  searchParams: routeSearchParams,
 }: {
-  params: { groupId: string };
-  searchParams: { date?: string };
+  params: Promise<{ groupId: string }>;
+  searchParams: Promise<{ date?: string }>;
 }) {
-  const supabase = createClient();
-  const date = searchParams.date ?? new Date().toISOString().slice(0, 10);
+  const params = await routeParams;
+  const searchParams = await routeSearchParams;
+  const supabase = await createClient();
+  const date = searchParams.date ?? wibToday();
 
   const { data: group } = await supabase
     .from("training_groups")

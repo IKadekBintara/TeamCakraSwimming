@@ -1,4 +1,5 @@
 "use client";
+import { wibToday } from "@/lib/notifications/time";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -35,7 +36,7 @@ export default function AthleteForm({
     address: athlete?.address ?? "",
     program: athlete?.program ?? "",
     group_id: athlete?.current_group_id ?? "",
-    join_date: athlete?.join_date ?? new Date().toISOString().slice(0, 10),
+    join_date: athlete?.join_date ?? wibToday(),
     status: (athlete?.status ?? "ACTIVE") as AthleteStatus,
     notes: athlete?.notes ?? "",
   });
@@ -52,7 +53,7 @@ export default function AthleteForm({
       .is("left_at", null)
       .maybeSingle();
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = wibToday();
 
     if (current && current.group_id !== newGroupId) {
       await supabase

@@ -1,16 +1,9 @@
-import { createClient } from "@/lib/supabase/server";
+import { getAuth } from "@/lib/supabase/auth-helper";
 import { redirect } from "next/navigation";
 
 /** Ambil profil user login; null bila tidak ada sesi. */
 export async function getProfile() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, full_name, role, account_status")
-    .eq("id", user.id)
-    .maybeSingle();
+  const { profile } = await getAuth();
   return profile;
 }
 

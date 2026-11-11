@@ -6,7 +6,7 @@ import type { Role } from "@/types";
 export const dynamic = "force-dynamic";
 
 export default async function UsersPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const [{ data: profiles }, { data: coaches }, { data: parents }] = await Promise.all([
     supabase.from("profiles").select("id, full_name, role, phone").order("full_name"),

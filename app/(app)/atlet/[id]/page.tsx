@@ -12,11 +12,12 @@ import type { PerfResult } from "@/lib/performance";
 export const dynamic = "force-dynamic";
 
 export default async function AtletDetailPage({
-  params,
+  params: routeParams,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const supabase = createClient();
+  const params = await routeParams;
+  const supabase = await createClient();
 
   const { data: athlete } = await supabase
     .from("athletes")

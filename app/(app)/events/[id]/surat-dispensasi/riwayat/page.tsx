@@ -10,11 +10,13 @@ const dateFormat = new Intl.DateTimeFormat("id-ID", {
 });
 
 export default async function RiwayatSuratPage({
-  params, searchParams,
+  params: routeParams, searchParams: routeSearchParams,
 }: {
-  params: { id: string };
-  searchParams: { halaman?: string };
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ halaman?: string }>;
 }) {
+  const params = await routeParams;
+  const searchParams = await routeSearchParams;
   if (!(await canManageLetters()) || !letterUuid.test(params.id)) notFound();
   const rawPage = Number(searchParams.halaman);
   const page = Number.isSafeInteger(rawPage) && rawPage >= 1 && rawPage <= 10000 ? rawPage : 1;

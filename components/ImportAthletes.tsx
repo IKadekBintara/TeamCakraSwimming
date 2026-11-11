@@ -4,7 +4,6 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { normalizeCakra } from "@/lib/cakra";
-import * as XLSX from "xlsx";
 import { normalizeWhatsapp } from "@/types";
 
 interface ParsedRow {
@@ -42,15 +41,31 @@ export default function ImportAthletes() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [issues, setIssues] = useState<RowIssue[]>([]);
+  const [parsing, setParsing] = useState(false);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
 
   async function parseFile(file: File) {
     setResult(null);
+    setRows([]);
+    setIssues([]);
+    if (file.size > 10 * 1024 * 1024) throw new Error("File Excel maksimal 10 MB.");
+    const XLSX = await import("xlsx");
     const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf);
+    const wb = XLSX.read(buf, { sheetRows: 1002 });
     const sheet = wb.Sheets[wb.SheetNames[0]];
+    if (!sheet) throw new Error("File Excel tidak memiliki lembar data.");
     const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+    if (!raw.length || raw.length > 1000) throw new Error("File harus berisi 1 sampai 1.000 baris atlet.");
+    function birthDate(value: unknown) {
+      if (typeof value === "number") {
+        const date = XLSX.SSF.parse_date_code(value, { date1904: wb.Workbook?.WBProps?.date1904 });
+        if (date) return [String(date.y).padStart(4, "0"), String(date.m).padStart(2, "0"), String(date.d).padStart(2, "0")].join("-");
+      }
+      const text = cell(value);
+      const local = text?.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+      return local ? [local[3], local[2].padStart(2, "0"), local[1].padStart(2, "0")].join("-") : text;
+    }
 
     const parsed: ParsedRow[] = raw.map((r) => {
       const g = cell(r["JK"] ?? r["Gender"] ?? r["Jenis Kelamin"]);
@@ -58,7 +73,7 @@ export default function ImportAthletes() {
       return {
         full_name: (cell(r["Nama Lengkap"] ?? r["Nama"] ?? r["full_name"]) ?? "").toUpperCase(),
         nickname: cell(r["Panggilan"] ?? r["Nickname"]),
-        birth_date: cell(r["Tanggal Lahir"] ?? r["birth_date"]),
+        birth_date: birthDate(r["Tanggal Lahir"] ?? r["birth_date"]),
         gender: g === "M" || g === "L" || g === "Laki-laki" ? "M" : g === "F" || g === "P" || g === "Perempuan" ? "F" : null,
         school: cell(r["Sekolah"] ?? r["School"]),
         grade: cell(r["Kelas"] ?? r["Grade"]),
@@ -88,25 +103,13 @@ export default function ImportAthletes() {
       } else {
         seen.set(key, rowNum);
       }
-      if (r.birth_date && isNaN(Date.parse(r.birth_date))) {
-        found.push({ row: rowNum, level: "warning", message: `Format tanggal lahir tidak dikenal: ${r.birth_date}` });
+      if (r.birth_date) {
+        const date = new Date(r.birth_date + "T00:00:00Z");
+        if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== r.birth_date) {
+          found.push({ row: rowNum, level: "error", message: `Tanggal lahir tidak valid: ${r.birth_date}` });
+        }
       }
     });
-
-    // Check duplicates against DB
-    const names = parsed.filter((r) => r.full_name).map((r) => r.full_name);
-    if (names.length > 0) {
-      const { data: existing } = await supabase
-        .from("athletes")
-        .select("full_name")
-        .in("full_name", names);
-      const existingSet = new Set((existing ?? []).map((e) => e.full_name.toLowerCase()));
-      parsed.forEach((r, i) => {
-        if (r.full_name && existingSet.has(r.full_name.toLowerCase())) {
-          found.push({ row: i + 2, level: "warning", message: `"${r.full_name}" sudah ada di database — akan dilewati` });
-        }
-      });
-    }
 
     setRows(parsed);
     setIssues(found);
@@ -119,20 +122,17 @@ export default function ImportAthletes() {
       const errorRows = new Set(issues.filter((i) => i.level === "error").map((i) => i.row));
 
       // Fetch group map
-      const { data: groups } = await supabase.from("training_groups").select("id, name");
+      const { data: groups, error: groupError } = await supabase.from("training_groups").select("id, name");
+      if (groupError) throw groupError;
       const groupMap = new Map((groups ?? []).map((g) => [g.name.toLowerCase(), g.id]));
-
-      // Fetch existing names to skip
-      const { data: existing } = await supabase.from("athletes").select("full_name");
-      const existingSet = new Set((existing ?? []).map((e) => e.full_name.toLowerCase()));
 
       const toInsert = rows
         .map((r, i) => ({ r, rowNum: i + 2 }))
-        .filter(({ r, rowNum }) => !errorRows.has(rowNum) && r.full_name && !existingSet.has(r.full_name.toLowerCase()))
+        .filter(({ r, rowNum }) => !errorRows.has(rowNum) && r.full_name)
         .map(({ r }) => ({
           full_name: r.full_name,
           nickname: r.nickname,
-          birth_date: r.birth_date && !isNaN(Date.parse(r.birth_date)) ? r.birth_date : null,
+          birth_date: r.birth_date,
           gender: r.gender,
           school: r.school,
           grade: r.grade,
@@ -156,16 +156,9 @@ export default function ImportAthletes() {
         return;
       }
 
-      const { error } = await supabase.from("athletes").insert(toInsert);
-      if (error) throw error;
-
-      await supabase.from("audit_logs").insert({
-        action: "import_excel",
-        entity: "athletes",
-        details: { inserted: toInsert.length, skipped: rows.length - toInsert.length },
-      });
-
-      setResult(`✓ Berhasil mengimpor ${toInsert.length} atlet (${rows.length - toInsert.length} dilewati).`);
+      const { data: inserted, error } = await supabase.rpc("import_club_athletes", { p_rows: toInsert });
+      if (error) throw new Error(error.message);
+      setResult(`✓ Berhasil mengimpor ${inserted} atlet (${rows.length - inserted} dilewati).`);
       setRows([]);
       setIssues([]);
       if (fileRef.current) fileRef.current.value = "";
@@ -192,10 +185,16 @@ export default function ImportAthletes() {
         ref={fileRef}
         type="file"
         accept=".xlsx,.xls"
+        disabled={parsing || importing}
         className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-brand-700"
         onChange={(e) => {
           const f = e.target.files?.[0];
-          if (f) parseFile(f);
+          if (!f) return;
+          setParsing(true);
+          void parseFile(f).catch((error: unknown) => {
+            setResult(error instanceof Error ? error.message : "File Excel gagal dibaca.");
+            if (fileRef.current) fileRef.current.value = "";
+          }).finally(() => setParsing(false));
         }}
       />
 

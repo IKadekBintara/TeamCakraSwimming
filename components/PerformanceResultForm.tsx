@@ -1,4 +1,5 @@
 "use client";
+import { wibToday } from "@/lib/notifications/time";
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -39,7 +40,7 @@ export default function PerformanceResultForm({
 
   const [form, setForm] = useState({
     athlete_id: editResult?.athlete_id ?? "",
-    recorded_at: editResult?.recorded_at ?? new Date().toISOString().slice(0, 10),
+    recorded_at: editResult?.recorded_at ?? wibToday(),
     stroke: editResult?.stroke ?? "Freestyle",
     distance: String(editResult?.distance ?? 50),
     time: editResult?.time_cs != null ? formatTime(editResult.time_cs) : "",

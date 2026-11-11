@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   if (rl) return rl;
   stage = "auth";
   log("stage=auth");
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
   stage = "authorization";
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role,account_status")
     .eq("id", user.id)
     .maybeSingle();
   log("stage=authorization.complete", { role: profile?.role ?? null, profile_query_error: profileError?.message ?? null });
@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
   log("stage=request.parsed", { kind, from, to, event_id: eventId });
 
   // Export berisi data organisasi — hanya staff yang boleh mengunduh.
-  if (!STAFF_ROLES.has(profile?.role ?? "")) {
+  if (profile?.account_status !== "ACTIVE" || !STAFF_ROLES.has(profile.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403, headers: { "x-request-id": requestId } });
   }
 

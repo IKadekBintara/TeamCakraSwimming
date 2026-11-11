@@ -1,4 +1,5 @@
 "use client";
+import { wibToday } from "@/lib/notifications/time";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -21,7 +22,7 @@ export default function AthleteStatusActions({
   const [mode, setMode] = useState<null | "left" | "reactivate">(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [leftAt, setLeftAt] = useState(new Date().toISOString().slice(0, 10));
+  const [leftAt, setLeftAt] = useState(wibToday());
   const [reason, setReason] = useState("");
 
   async function submit(action: "mark_left" | "reactivate") {

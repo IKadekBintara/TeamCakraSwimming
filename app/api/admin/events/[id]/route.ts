@@ -5,7 +5,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 export const dynamic = "force-dynamic";
 
 async function admin() {
-  const client = createClient();
+  const client = await createClient();
   const { data: { user } } = await client.auth.getUser();
   if (!user) return { error: 401 as const };
   const { data: profile } = await client.from("profiles").select("role,account_status").eq("id", user.id).maybeSingle();
@@ -15,7 +15,8 @@ async function admin() {
 const EVENT_STATUSES = new Set(["DRAFT", "OPEN", "CLOSED", "ARCHIVED"]);
 function fail(message: string, status = 400) { return NextResponse.json({ error: message }, { status }); }
 
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_: NextRequest, { params: routeParams }: { params: Promise<{ id: string }> }) {
+  const params = await routeParams;
   const ctx = await admin(); if ("error" in ctx) return fail(ctx.error === 401 ? "Sesi login diperlukan" : "Admin only", ctx.error);
   const [{ data: event, error: eventError }, { data: races, error: raceError }, { data: kuConfigs, error: kuError }] = await Promise.all([
     ctx.service.from("events").select("id,name,event_date,location,description,registration_deadline,status,fee_per_entry,admin_fee,contact_person,contact_whatsapp,payment_instructions").eq("id", params.id).single(),
@@ -26,7 +27,8 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   return NextResponse.json({ event, races: races || [], ku_configs: kuConfigs || [] });
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params: routeParams }: { params: Promise<{ id: string }> }) {
+  const params = await routeParams;
   const ctx = await admin(); if ("error" in ctx) return fail(ctx.error === 401 ? "Sesi login diperlukan" : "Admin only", ctx.error);
   const body = await request.json().catch(() => null);
   const action = body?.action;
@@ -92,7 +94,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   return fail("Aksi konfigurasi tidak dikenali");
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params: routeParams }: { params: Promise<{ id: string }> }) {
+  const params = await routeParams;
   const ctx = await admin(); if ("error" in ctx) return fail(ctx.error === 401 ? "Sesi login diperlukan" : "Admin only", ctx.error);
   const raceId = request.nextUrl.searchParams.get("race_id");
   if (!raceId) return fail("race_id wajib diisi");

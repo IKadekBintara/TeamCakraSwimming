@@ -7,10 +7,11 @@ import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 
-export default async function SuratDispensasiPage({ params }: { params: { id: string } }) {
+export default async function SuratDispensasiPage({ params: routeParams }: { params: Promise<{ id: string }> }) {
+  const params = await routeParams;
   if (!(await canManageLetters())) notFound();
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const numbers = createServiceClient().from("dispensation_letter_numbers");
   const [eventResult, registrationResult, existingNumbers, latestNumber] = await Promise.all([
     supabase.from("events").select("id,name,event_date,location").eq("id", params.id).maybeSingle(),

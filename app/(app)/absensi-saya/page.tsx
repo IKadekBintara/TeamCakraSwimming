@@ -1,3 +1,5 @@
+import PortalAthletePicker from "@/components/PortalAthletePicker";
+import { getPortalAthlete } from "@/lib/portal-athletes";
 import { getProfile } from "@/lib/page-guard";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -6,19 +8,22 @@ import { ATTENDANCE_LABELS } from "@/types";
 export const dynamic = "force-dynamic";
 
 /** ABSENSI SAYA — riwayat kehadiran atlet sendiri via RLS. */
-export default async function AbsensiSayaPage() {
+export default async function AbsensiSayaPage({ searchParams }: { searchParams: Promise<{ atlet?: string }> }) {
   const profile = await getProfile();
   if (!profile) redirect("/login");
   if (!["athlete", "parent"].includes((profile.role as string) ?? "")) redirect("/absensi");
 
-  const supabase = createClient();
-  const { data: athlete } = await supabase.from("athletes").select("id, full_name").limit(1).maybeSingle();
+  const supabase = await createClient();
+  const { atlet } = await searchParams;
+  const { athletes, selected } = await getPortalAthlete(supabase, atlet);
+  const athlete = selected;
 
-  const { data: rows } = await supabase
+  const { data: rows } = selected ? await supabase
     .from("attendance")
     .select("id, status, created_at, training_sessions(session_date, start_time)")
+    .eq("athlete_id", selected.id)
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(100) : { data: [] };
 
   const total = (rows ?? []).length;
   const present = (rows ?? []).filter((r) => r.status === "present").length;
@@ -30,6 +35,7 @@ export default async function AbsensiSayaPage() {
         <h1 className="text-2xl font-bold">Absensi Saya</h1>
         <p className="text-sm text-slate-500">{athlete?.full_name ?? ""}</p>
       </div>
+      {selected && <PortalAthletePicker athletes={athletes} selected={selected.id} path="/absensi-saya" />}
 
       <div className="card">
         <div className="mb-3 flex items-center justify-between">

@@ -1,3 +1,4 @@
+import { wibToday } from "@/lib/notifications/time";
 import { createClient } from "@/lib/supabase/server";
 import { ATTENDANCE_LABELS } from "@/types";
 import ExportButtons from "@/components/ExportButtons";
@@ -5,14 +6,15 @@ import ExportButtons from "@/components/ExportButtons";
 export const dynamic = "force-dynamic";
 
 export default async function LaporanPage({
-  searchParams,
+  searchParams: routeSearchParams,
 }: {
-  searchParams: { from?: string; to?: string };
+  searchParams: Promise<{ from?: string; to?: string }>;
 }) {
-  const supabase = createClient();
-  const now = new Date();
-  const from = searchParams.from ?? new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const to = searchParams.to ?? now.toISOString().slice(0, 10);
+  const searchParams = await routeSearchParams;
+  const supabase = await createClient();
+  const today = wibToday();
+  const from = searchParams.from ?? `${today.slice(0, 7)}-01`;
+  const to = searchParams.to ?? today;
 
   const { data: sessions } = await supabase
     .from("training_sessions")

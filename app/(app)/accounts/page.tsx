@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Account Management" };
 
 export default async function AccountsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { user } = await getAuth();
   if (!user) redirect("/login");
   const { data: profile } = await supabase.from("profiles").select("role, account_status").eq("id", user.id).maybeSingle();

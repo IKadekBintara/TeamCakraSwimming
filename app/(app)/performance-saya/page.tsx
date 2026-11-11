@@ -1,3 +1,5 @@
+import PortalAthletePicker from "@/components/PortalAthletePicker";
+import { getPortalAthlete } from "@/lib/portal-athletes";
 import { getProfile } from "@/lib/page-guard";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -5,19 +7,22 @@ import { createClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 /** PERFORMANCE SAYA — hasil performa atlet sendiri via RLS perf_select_athlete_self. */
-export default async function PerformanceSayaPage() {
+export default async function PerformanceSayaPage({ searchParams }: { searchParams: Promise<{ atlet?: string }> }) {
   const profile = await getProfile();
   if (!profile) redirect("/login");
   if (!["athlete", "parent"].includes((profile.role as string) ?? "")) redirect("/performance");
 
-  const supabase = createClient();
-  const { data: athlete } = await supabase.from("athletes").select("id, full_name").limit(1).maybeSingle();
+  const supabase = await createClient();
+  const { atlet } = await searchParams;
+  const { athletes, selected } = await getPortalAthlete(supabase, atlet);
+  const athlete = selected;
 
-  const { data: results } = await supabase
+  const { data: results } = selected ? await supabase
     .from("athlete_performance_results")
     .select("*")
+    .eq("athlete_id", selected.id)
     .order("recorded_at", { ascending: false })
-    .limit(200);
+    .limit(200) : { data: [] };
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 ">
@@ -25,6 +30,7 @@ export default async function PerformanceSayaPage() {
         <h1 className="text-2xl font-bold">Performance Saya</h1>
         <p className="text-sm text-slate-500">{athlete?.full_name ?? ""}</p>
       </div>
+      {selected && <PortalAthletePicker athletes={athletes} selected={selected.id} path="/performance-saya" />}
 
       {(results ?? []).length === 0 ? (
         <div className="card"><p className="text-sm text-slate-500">Belum ada catatan performa.</p></div>

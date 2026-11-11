@@ -1,10 +1,11 @@
+import { wibToday } from "@/lib/notifications/time";
 import ImportAthletes from "@/components/ImportAthletes";
 import ExportButtons from "@/components/ExportButtons";
 
 export const dynamic = "force-dynamic";
 
 export default function ImportExportPage() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = wibToday();
   const monthStart = today.slice(0, 8) + "01";
 
   return (

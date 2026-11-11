@@ -4,7 +4,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params: routeParams }: { params: Promise<{ id: string }> }) {
+  const params = await routeParams;
   if (!(await canManageLetters())) return new Response("Akses admin atau operator diperlukan.", { status: 403 });
   if (!letterUuid.test(params.id)) return new Response("Surat tidak ditemukan.", { status: 404 });
   const { data, error } = await createServiceClient().from("dispensation_letter_history")

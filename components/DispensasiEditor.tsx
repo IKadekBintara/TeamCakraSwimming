@@ -1,4 +1,5 @@
 "use client";
+import { wibToday } from "@/lib/notifications/time";
 
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { defaultClosing, defaultLayout, defaultOpening, type Letter } from "@/lib/dispensasi";
@@ -19,7 +20,7 @@ const layoutFields = [
 ] as const;
 
 function initialLetter(athlete: Athlete, event: Event): Letter {
-  const issueDate = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Jakarta" }).format(new Date());
+  const issueDate = wibToday();
   return {
     athlete: athlete.full_name, school: athlete.school ?? "",
     event: event.name, venue: event.location ?? "",

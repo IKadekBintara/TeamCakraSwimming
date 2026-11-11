@@ -7,11 +7,12 @@ import NotificationPrefsForm from "@/components/NotificationPrefsForm";
 export const dynamic = "force-dynamic";
 
 export default async function NotificationsPage({
-  searchParams,
+  searchParams: routeSearchParams,
 }: {
-  searchParams: { filter?: string };
+  searchParams: Promise<{ filter?: string }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await routeSearchParams;
+  const supabase = await createClient();
   const { user } = await getAuth();
   if (!user) redirect("/login");
 

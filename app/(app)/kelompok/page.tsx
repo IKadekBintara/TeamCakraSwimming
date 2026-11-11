@@ -6,7 +6,7 @@ import ScheduleManager from "@/components/ScheduleManager";
 export const dynamic = "force-dynamic";
 
 export default async function KelompokPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const [{ data: groups, error: groupsError }, { data: coaches }, { data: leaders }, { data: members }, { data: schedules }, { data: allAthletes }] = await Promise.all([
     supabase.from("training_groups").select("*, coaches(full_name)").order("name"),

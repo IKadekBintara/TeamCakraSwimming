@@ -27,11 +27,12 @@ type Row = {
 };
 
 export default async function PerformancePage({
-  searchParams,
+  searchParams: routeSearchParams,
 }: {
-  searchParams: { q?: string; group?: string; ku?: string; stroke?: string; from?: string; to?: string; event?: string; page?: string; edit?: string };
+  searchParams: Promise<{ q?: string; group?: string; ku?: string; stroke?: string; from?: string; to?: string; event?: string; page?: string; edit?: string }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await routeSearchParams;
+  const supabase = await createClient();
   const { user } = await getAuth();
   if (!user) redirect("/login");
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();

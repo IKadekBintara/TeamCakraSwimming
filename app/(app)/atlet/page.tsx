@@ -23,15 +23,16 @@ const SORTS = [
 const PAGE_SIZE = 25;
 
 export default async function AtletPage({
-  searchParams,
+  searchParams: routeSearchParams,
 }: {
-  searchParams: { q?: string; status?: string; group?: string; ku?: string; sort?: string; page?: string };
+  searchParams: Promise<{ q?: string; status?: string; group?: string; ku?: string; sort?: string; page?: string }>;
 }) {
+  const searchParams = await routeSearchParams;
   // Atlet/parent tidak melihat daftar seluruh atlet — diarahkan ke halaman pribadi.
   const viewer = await getProfile();
   if (!["admin", "operator", "coach", "group_leader", "ketua_kelompok"].includes((viewer?.role as string) ?? "")) redirect("/profil-saya");
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const q = searchParams.q?.trim() ?? "";
   const status = searchParams.status ?? "ACTIVE";
   const fGroup = searchParams.group ?? "ALL";

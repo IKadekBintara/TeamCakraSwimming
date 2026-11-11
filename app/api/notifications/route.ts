@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 
 /** GET /api/notifications?unread=1&limit=20 — notifikasi user yang sedang login. */
 export async function GET(req: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

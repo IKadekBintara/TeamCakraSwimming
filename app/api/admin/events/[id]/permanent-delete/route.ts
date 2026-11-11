@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * - POST: hapus permanen + audit + enqueue Excel cleanup per config aktif.
  */
 async function adminCtx() {
-  const client = createClient();
+  const client = await createClient();
   const { data: { user } } = await client.auth.getUser();
   if (!user) return { error: 401 as const };
   const { data: profile } = await client.from("profiles").select("role, account_status").eq("id", user.id).maybeSingle();

@@ -18,11 +18,12 @@ function safeJson(v: unknown): string {
 }
 
 export default async function AuditPage({
-  searchParams,
+  searchParams: routeSearchParams,
 }: {
-  searchParams: { actor?: string; action?: string; from?: string; to?: string; page?: string };
+  searchParams: Promise<{ actor?: string; action?: string; from?: string; to?: string; page?: string }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await routeSearchParams;
+  const supabase = await createClient();
   const fActor = searchParams.actor?.trim() ?? "";
   const fAction = searchParams.action?.trim() ?? "";
   const from = searchParams.from ?? "";

@@ -263,7 +263,7 @@ export default function EventPaymentsManager({ rows, eventName, eventId, canMana
                   <div className="flex justify-between gap-4"><dt className="text-slate-500">Tagihan</dt><dd>{rupiah(modal.row.pay.total)}</dd></div>
                   <div className="flex justify-between gap-4"><dt className="text-slate-500">Status Pembayaran</dt><dd>{paymentStatusLabel(modal.row.pay.status as PaymentStatus)}</dd></div>
                   <div className="flex justify-between gap-4"><dt className="text-slate-500">Metode</dt><dd>{modal.row.pay.method || "—"}</dd></div>
-                  <div className="flex justify-between gap-4"><dt className="text-slate-500">Bukti</dt><dd>{modal.row.pay.proof ? <a href={modal.row.pay.proof} target="_blank" rel="noreferrer" className="text-brand-700 underline">Lihat bukti</a> : "—"}</dd></div>
+                  <div className="flex justify-between gap-4"><dt className="text-slate-500">Bukti</dt><dd>{modal.row.pay.proof ? <a href={`/api/payment-proofs/${modal.row.pay.id}`} target="_blank" rel="noreferrer" className="text-brand-700 underline">Lihat bukti</a> : "—"}</dd></div>
                 </dl>
                 {canManage && modal.row.regStatus !== "CANCELLED" && modal.row.pay.status !== "CANCELLED" && (
                   <div className="mt-4 flex justify-end gap-2">

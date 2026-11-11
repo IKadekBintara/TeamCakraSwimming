@@ -4,7 +4,7 @@ import AthleteForm from "@/components/AthleteForm";
 export const dynamic = "force-dynamic";
 
 export default async function TambahAtletPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: groups } = await supabase
     .from("training_groups")
     .select("id, name")

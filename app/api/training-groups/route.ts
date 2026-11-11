@@ -4,7 +4,7 @@ import { getAuth } from "@/lib/supabase/auth-helper";
 
 /** Daftar kelompok latihan (satu sumber kebenaran: tabel training_groups). */
 export async function GET() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { user } = await getAuth();
   if (!user) return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
   const { data, error } = await supabase.from("training_groups").select("id, name").order("name");

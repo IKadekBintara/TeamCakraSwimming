@@ -11,7 +11,7 @@ import FailedDeliveries from "@/components/FailedDeliveries";
 export const dynamic = "force-dynamic";
 
 export default async function CommunicationPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { user, profile } = await getAuth();
   if (!user) redirect("/login");
   if (!profile || !["admin", "operator"].includes(profile.role)) {
