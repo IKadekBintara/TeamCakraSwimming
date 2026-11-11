@@ -1,7 +1,7 @@
 "use client";
 import { wibToday } from "@/lib/notifications/time";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Athlete, AthleteStatus } from "@/types";
@@ -20,6 +20,7 @@ export default function AthleteForm({
   athlete?: Partial<Athlete> & { id?: string; current_group_id?: string | null };
 }) {
   const router = useRouter();
+  const createdAthleteId = useRef<string | null>(null);
   const supabase = createClient();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,26 +47,15 @@ export default function AthleteForm({
   }
 
   async function syncMembership(athleteId: string, newGroupId: string) {
-    const { data: current } = await supabase
-      .from("training_group_members")
-      .select("id, group_id")
-      .eq("athlete_id", athleteId)
-      .is("left_at", null)
-      .maybeSingle();
-
-    const today = wibToday();
-
-    if (current && current.group_id !== newGroupId) {
-      await supabase
-        .from("training_group_members")
-        .update({ left_at: today })
-        .eq("id", current.id);
-    }
-    if (newGroupId && (!current || current.group_id !== newGroupId)) {
-      await supabase
-        .from("training_group_members")
-        .insert({ group_id: newGroupId, athlete_id: athleteId, joined_at: today });
-    }
+    const { data: current, error: currentError } = await supabase
+      .from("training_group_members").select("id,group_id")
+      .eq("athlete_id", athleteId).is("left_at", null).maybeSingle();
+    if (currentError) throw new Error(currentError.message);
+    if (current?.group_id === newGroupId) return;
+    const { error } = await supabase.rpc("change_training_group_membership", {
+      p_athlete_id: athleteId, p_group_id: newGroupId, p_expected_member_id: current?.id ?? null,
+    });
+    if (error) throw new Error(error.message);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -99,7 +89,7 @@ export default function AthleteForm({
 
     try {
       let athleteId: string;
-      if (mode === "create") {
+      if (mode === "create" && !createdAthleteId.current) {
         const { data, error } = await supabase
           .from("athletes")
           .insert(payload)
@@ -107,11 +97,12 @@ export default function AthleteForm({
           .single();
         if (error) throw error;
         athleteId = data.id;
+        createdAthleteId.current = athleteId;
         await supabase.from("audit_logs").insert({
           action: "create_athlete", entity: "athletes", entity_id: athleteId, new_value: payload,
         });
       } else {
-        athleteId = athlete!.id!;
+        athleteId = createdAthleteId.current ?? athlete!.id!;
         const { error } = await supabase.from("athletes").update(payload).eq("id", athleteId);
         if (error) throw error;
         await supabase.from("audit_logs").insert({
@@ -119,7 +110,7 @@ export default function AthleteForm({
         });
         // Rename → sinkronkan snapshot athlete_name pada arsip pembayaran.
         // Identity tetap athlete_id; nama hanya atribut yang ikut diperbarui.
-        if (payload.full_name && payload.full_name !== athlete!.full_name) {
+        if (payload.full_name && payload.full_name !== athlete?.full_name) {
           const { error: snapErr } = await supabase
             .from("event_payments")
             .update({ athlete_name: payload.full_name })

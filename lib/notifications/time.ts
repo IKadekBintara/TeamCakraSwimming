@@ -12,8 +12,8 @@ export function nowWib(): Date {
 }
 
 /** Tanggal (YYYY-MM-DD) hari ini menurut WIB. */
-export function wibToday(): string {
-  return nowWib().toISOString().slice(0, 10);
+export function wibToday(now = new Date()): string {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: APP_TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 }
 
 /**

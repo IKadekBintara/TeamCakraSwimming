@@ -13,7 +13,7 @@ export default function PaymentProofForm({ paymentId, currentAmount, totalAmount
     if (file.size > 5 * 1024 * 1024) { setError("Ukuran bukti maksimal 5 MB."); setSaving(false); return; }
     if (!file.type.startsWith("image/") && file.type !== "application/pdf") { setError("Bukti harus berupa gambar atau PDF."); setSaving(false); return; }
     const paid = Number(amount);
-    if (!Number.isSafeInteger(paid) || paid <= 0) { setError("Masukkan nominal pembayaran yang valid."); setSaving(false); return; }
+    if (!Number.isSafeInteger(paid) || paid <= 0 || paid > totalAmount) { setError("Masukkan nominal pembayaran yang tidak melebihi tagihan."); setSaving(false); return; }
     const path = `${paymentId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
     const { error: uploadError } = await supabase.storage.from("payment-proofs").upload(path, file, { upsert: false, contentType: file.type });
     if (uploadError) { setError(uploadError.message); setSaving(false); return; }

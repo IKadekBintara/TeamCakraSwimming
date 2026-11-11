@@ -1,6 +1,6 @@
 import type { Athlete } from "@/types";
 
-export type EventStatus = "DRAFT" | "OPEN" | "CLOSED" | "CANCELLED";
+export type EventStatus = "DRAFT" | "OPEN" | "CLOSED" | "ARCHIVED";
 export type PaymentStatus = "BELUM_BAYAR" | "MENUNGGU_VERIFIKASI" | "DP" | "LUNAS" | "DITOLAK" | "CANCELLED";
 
 export function birthYearFromDate(birthDate: string | null | undefined): number | null {

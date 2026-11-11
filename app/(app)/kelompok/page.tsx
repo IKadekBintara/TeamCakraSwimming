@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getAuth } from "@/lib/supabase/auth-helper";
 import GroupForm from "@/components/GroupForm";
 import GroupMembers from "@/components/GroupMembers";
 import ScheduleManager from "@/components/ScheduleManager";
@@ -7,6 +8,8 @@ export const dynamic = "force-dynamic";
 
 export default async function KelompokPage() {
   const supabase = await createClient();
+  const { profile } = await getAuth();
+  const canManage = profile?.role === "admin" || profile?.role === "operator";
 
   const [{ data: groups, error: groupsError }, { data: coaches }, { data: leaders }, { data: members }, { data: schedules }, { data: allAthletes }] = await Promise.all([
     supabase.from("training_groups").select("*, coaches(full_name)").order("name"),
@@ -27,6 +30,8 @@ export default async function KelompokPage() {
       ? await supabase.from("profiles").select("id, full_name").in("id", leaderIds)
       : { data: [] as { id: string; full_name: string }[] };
   const leaderNameById = new Map((leaderProfiles ?? []).map((p) => [p.id, p.full_name]));
+  const assignedIds = new Set((members ?? []).map((member) => member.athlete_id));
+  const available = (allAthletes ?? []).filter((athlete) => !assignedIds.has(athlete.id));
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 ">
@@ -53,8 +58,6 @@ export default async function KelompokPage() {
           {(groups ?? []).map((g) => {
             const groupMembers = (members ?? []).filter((m) => m.group_id === g.id);
             const groupSchedules = (schedules ?? []).filter((s) => s.group_id === g.id);
-            const assignedIds = new Set((members ?? []).map((m) => m.athlete_id));
-            const available = (allAthletes ?? []).filter((a) => !assignedIds.has(a.id));
             return (
               <div key={g.id} className="card space-y-3">
                 <div className="flex items-start justify-between gap-3">
@@ -74,32 +77,33 @@ export default async function KelompokPage() {
                       {groupMembers.length} atlet
                     </p>
                   </div>
-                  <GroupForm
+                  {canManage && <GroupForm
                     coaches={coaches ?? []}
                     leaders={(leaders ?? []).map((l) => ({ id: l.id, full_name: l.full_name }))}
                     group={{ id: g.id, name: g.name, location: g.location, coach_id: g.coach_id, leader_id: g.leader_id, is_active: g.is_active }}
                     compact
-                  />
+                  />}
                 </div>
 
-                <ScheduleManager groupId={g.id} schedules={groupSchedules} />
+                <ScheduleManager groupId={g.id} schedules={groupSchedules} canManage={canManage} />
 
                 <GroupMembers
                   groupId={g.id}
+                  canManage={canManage}
                   members={groupMembers.map((m) => ({
                     id: m.id,
                     athlete_id: m.athlete_id,
                     name: (m.athletes as { full_name?: string } | null)?.full_name ?? "—",
                   }))}
                   available={available.map((a) => ({ id: a.id, name: a.full_name }))}
-                  otherGroups={(groups ?? []).filter((og) => og.id !== g.id).map((og) => ({ id: og.id, name: og.name }))}
+                  otherGroups={(groups ?? []).filter((og) => og.id !== g.id && og.is_active).map((og) => ({ id: og.id, name: og.name }))}
                 />
               </div>
             );
           })}
         </div>
 
-        <div>
+        {canManage && <div>
           <div className="card">
             <h2 className="mb-3 font-semibold">Tambah Kelompok</h2>
             <GroupForm
@@ -107,7 +111,7 @@ export default async function KelompokPage() {
               leaders={(leaders ?? []).map((l) => ({ id: l.id, full_name: l.full_name }))}
             />
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );

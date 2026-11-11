@@ -20,10 +20,10 @@ export default async function EventsPage({
 }) {
   const { deleted } = await searchParams;
   const supabase = await createClient();
-  const [{ data: events }, { data: profile }, { data: regs }] = await Promise.all([
+  const [{ data: events }, { profile }, { data: regs }] = await Promise.all([
     supabase.from("events").select("id, name, event_date, location, description, contact_person, contact_whatsapp, payment_instructions, fee_per_entry, admin_fee, status, registration_deadline").order("event_date", { ascending: false }),
-    supabase.from("profiles").select("role").eq("id", ((await getAuth()).user?.id ?? "")).maybeSingle(),
-    supabase.from("event_registrations").select("id, event_id"),
+    getAuth(),
+    supabase.from("event_registrations").select("event_id").eq("status", "REGISTERED"),
   ]);
   const canManage = profile?.role === "admin";
   const regCounts = new Map<string, number>();

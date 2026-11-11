@@ -95,7 +95,7 @@ export default async function DashboardPage() {
     supabase.from("training_group_members").select("group_id, athlete_id").is("left_at", null),
     supabase.from("events").select("id, name, status, event_date, location, registration_deadline").order("event_date", { ascending: false }),
     supabase.from("event_payments").select("event_id, athlete_id, registration_fee, admin_fee, total_amount, amount_paid, payment_status"),
-    supabase.from("event_registrations").select("id, event_id"),
+    supabase.from("event_registrations").select("id, event_id").eq("status", "REGISTERED"),
     supabase.from("audit_logs").select("id, action, entity, created_at, profiles(full_name)").order("created_at", { ascending: false }).limit(8),
     supabase.from("athlete_performance_results").select("id, athlete_id, stroke, distance, time_cs, recorded_at, athletes(cakra)"),
   ]);

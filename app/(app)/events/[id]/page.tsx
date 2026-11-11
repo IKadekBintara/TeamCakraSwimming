@@ -15,8 +15,7 @@ export const dynamic = "force-dynamic";
 export default async function EventDetailPage({ params: routeParams }: { params: Promise<{ id: string }> }) {
   const params = await routeParams;
   const supabase = await createClient();
-  const { user } = await getAuth();
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user?.id ?? "").maybeSingle();
+  const { profile } = await getAuth();
   const canManage = profile?.role === "admin" || profile?.role === "operator";
   const canRegister = canManage || profile?.role === "parent" || profile?.role === "athlete";
   const [{ data: event }, { data: races }, { data: athletes }, { data: memberships }, { data: registrations }] = await Promise.all([
