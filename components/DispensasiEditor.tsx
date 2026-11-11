@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { defaultClosing, defaultLayout, defaultOpening, type Letter } from "@/lib/dispensasi";
+import { issueLetterNumber } from "@/app/(app)/events/[id]/surat-dispensasi/actions";
 
 type Event = { id: string; name: string; event_date: string; location: string | null };
 type Athlete = { id: string; full_name: string; school: string | null };
@@ -32,7 +33,7 @@ function initialLetter(athlete: Athlete, event: Event): Letter {
 
 const textFields = [
   ["athlete", "Nama atlet"], ["school", "Sekolah"], ["event", "Nama kejuaraan"], ["venue", "Lokasi lomba"],
-  ["number", "Nomor surat"], ["attachment", "Lampiran"], ["subject", "Perihal"], ["city", "Tempat surat"],
+  ["attachment", "Lampiran"], ["subject", "Perihal"], ["city", "Tempat surat"],
   ["signer", "Nama penandatangan"], ["position", "Jabatan"], ["organization", "Organisasi"],
 ] as const;
 
@@ -47,7 +48,16 @@ function validate(letter: Letter) {
   return "";
 }
 
-export default function DispensasiEditor({ event, athletes }: { event: Event; athletes: Athlete[] }) {
+const romanMonths = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+
+export default function DispensasiEditor({
+  event, athletes, nextNumber, issuedNumbers,
+}: {
+  event: Event;
+  athletes: Athlete[];
+  nextNumber: number;
+  issuedNumbers: Record<string, string>;
+}) {
   const [athleteId, setAthleteId] = useState(athletes[0].id);
   const [drafts, setDrafts] = useState<Record<string, Letter>>(() => ({
     [athletes[0].id]: initialLetter(athletes[0], event),
@@ -59,7 +69,18 @@ export default function DispensasiEditor({ event, athletes }: { event: Event; at
   const [layoutMessage, setLayoutMessage] = useState("");
   const [preview, setPreview] = useState<{ url: string; letter: Letter; layout: typeof defaultLayout; header: Header }>();
   const [pdfError, setPdfError] = useState("");
-  const letter = drafts[athleteId];
+  const [numbers, setNumbers] = useState(issuedNumbers);
+  const [nextSequence, setNextSequence] = useState(nextNumber);
+  const [issuing, setIssuing] = useState(false);
+  const [issueError, setIssueError] = useState("");
+  const draft = drafts[athleteId];
+  const issuedNumber = numbers[athleteId];
+  const letter = useMemo(() => {
+    const [year, month] = draft.issueDate.split("-");
+    const romanMonth = romanMonths[Number(month) - 1];
+    const estimated = romanMonth ? `${String(nextSequence).padStart(3, "0")} DISP/TCSJ/${romanMonth}/${year}` : "";
+    return { ...draft, number: issuedNumber ?? estimated };
+  }, [draft, issuedNumber, nextSequence]);
   const header = customHeader ?? defaultHeader;
   const validation = validate(letter);
 
@@ -121,6 +142,7 @@ export default function DispensasiEditor({ event, athletes }: { event: Event; at
     if (!athlete) return;
     setDrafts((previous) => previous[id] ? previous : { ...previous, [id]: initialLetter(athlete, event) });
     setAthleteId(id);
+    setIssueError("");
   }
 
   async function uploadHeader(event: ChangeEvent<HTMLInputElement>) {
@@ -148,6 +170,25 @@ export default function DispensasiEditor({ event, athletes }: { event: Event; at
     }
   }
 
+  async function publishNumber() {
+    if (issuing || issuedNumber || !ready) return;
+    setIssuing(true);
+    setIssueError("");
+    try {
+      const result = await issueLetterNumber(event.id, athleteId, letter.issueDate);
+      if (result.error) {
+        setIssueError(result.error);
+      } else if (result.number && result.sequence) {
+        setNumbers((previous) => ({ ...previous, [athleteId]: result.number }));
+        setNextSequence((previous) => Math.max(previous, result.sequence + 1));
+      }
+    } catch {
+      setIssueError("Nomor surat belum bisa diterbitkan. Coba lagi.");
+    } finally {
+      setIssuing(false);
+    }
+  }
+
   const ready = preview && preview.letter === letter && preview.layout === layout && preview.header === header;
 
   return (
@@ -160,6 +201,10 @@ export default function DispensasiEditor({ event, athletes }: { event: Event; at
           </select>
         </label>
         <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-sm">
+            Nomor surat {issuedNumber ? "" : "(perkiraan)"}
+            <input className={inputClass} value={letter.number} readOnly />
+          </label>
           {textFields.map(([key, label]) => (
             <label key={key} className="block text-sm">
               {label}
@@ -230,10 +275,14 @@ export default function DispensasiEditor({ event, athletes }: { event: Event; at
       <section className="card min-w-0 space-y-3" aria-label="Pratinjau surat">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-semibold">Pratinjau A4</h2>
-          {ready && <a className="btn-primary" href={preview.url} download={`Surat Dispensasi - ${letter.athlete.replace(/[\\/:*?"<>|]/g, "-")}.pdf`}>
+          {ready && issuedNumber && <a className="btn-primary" href={preview.url} download={`Surat Dispensasi - ${letter.athlete.replace(/[\\/:*?"<>|]/g, "-")}.pdf`}>
             Unduh PDF
           </a>}
+          {!issuedNumber && <button type="button" className="btn-primary" disabled={!ready || issuing} onClick={publishNumber}>
+            {issuing ? "Menerbitkan…" : "Terbitkan nomor"}
+          </button>}
         </div>
+        {issueError && <p role="alert" className="text-sm text-red-700">{issueError}</p>}
         {headerError && <p role="alert" className="text-sm text-red-700">{headerError}</p>}
         {ready
           ? <iframe className="h-[72vh] min-h-96 w-full rounded-lg border bg-white" title="Pratinjau PDF surat dispensasi" src={preview.url} />
