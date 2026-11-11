@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { defaultClosing, defaultLayout, defaultOpening, type Letter } from "@/lib/dispensasi";
-import { issueLetterNumber } from "@/app/(app)/events/[id]/surat-dispensasi/actions";
 
 type Event = { id: string; name: string; event_date: string; location: string | null };
 type Athlete = { id: string; full_name: string; school: string | null };
@@ -71,8 +70,9 @@ export default function DispensasiEditor({
   const [pdfError, setPdfError] = useState("");
   const [numbers, setNumbers] = useState(issuedNumbers);
   const [nextSequence, setNextSequence] = useState(nextNumber);
-  const [issuing, setIssuing] = useState(false);
-  const [issueError, setIssueError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [savedPdf, setSavedPdf] = useState<{ id: string; athleteId: string }>();
   const draft = drafts[athleteId];
   const issuedNumber = numbers[athleteId];
   const letter = useMemo(() => {
@@ -142,7 +142,7 @@ export default function DispensasiEditor({
     if (!athlete) return;
     setDrafts((previous) => previous[id] ? previous : { ...previous, [id]: initialLetter(athlete, event) });
     setAthleteId(id);
-    setIssueError("");
+    setSaveError("");
   }
 
   async function uploadHeader(event: ChangeEvent<HTMLInputElement>) {
@@ -170,22 +170,38 @@ export default function DispensasiEditor({
     }
   }
 
-  async function publishNumber() {
-    if (issuing || issuedNumber || !ready) return;
-    setIssuing(true);
-    setIssueError("");
+  async function saveAndDownload() {
+    if (saving || !ready || !header) return;
+    setSaving(true);
+    setSaveError("");
     try {
-      const result = await issueLetterNumber(event.id, athleteId, letter.issueDate);
-      if (result.error) {
-        setIssueError(result.error);
-      } else if (result.number && result.sequence) {
-        setNumbers((previous) => ({ ...previous, [athleteId]: result.number }));
-        setNextSequence((previous) => Math.max(previous, result.sequence + 1));
+      const form = new FormData();
+      form.set("eventId", event.id);
+      form.set("athleteId", athleteId);
+      form.set("letter", JSON.stringify(letter));
+      form.set("layout", JSON.stringify(layout));
+      form.set("header", new Blob([header.bytes], { type: header.type }));
+      const response = await fetch("/api/dispensation-letters", {
+        method: "POST", headers: { "x-cakra-letter": "1" }, body: form,
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.letter?.id) {
+        setSaveError(result?.error || "Surat belum tersimpan. Coba lagi.");
+        return;
       }
+      setNumbers((previous) => ({ ...previous, [athleteId]: result.letter.letter_number }));
+      setNextSequence((previous) => Math.max(previous, result.sequence + 1));
+      setSavedPdf({ id: result.letter.id, athleteId });
+      const link = document.createElement("a");
+      link.href = `/api/dispensation-letters/${result.letter.id}?download=1`;
+      link.download = "";
+      document.body.append(link);
+      link.click();
+      link.remove();
     } catch {
-      setIssueError("Nomor surat belum bisa diterbitkan. Coba lagi.");
+      setSaveError("Surat belum tersimpan. Coba lagi.");
     } finally {
-      setIssuing(false);
+      setSaving(false);
     }
   }
 
@@ -275,14 +291,18 @@ export default function DispensasiEditor({
       <section className="card min-w-0 space-y-3" aria-label="Pratinjau surat">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-semibold">Pratinjau A4</h2>
-          {ready && issuedNumber && <a className="btn-primary" href={preview.url} download={`Surat Dispensasi - ${letter.athlete.replace(/[\\/:*?"<>|]/g, "-")}.pdf`}>
-            Unduh PDF
-          </a>}
-          {!issuedNumber && <button type="button" className="btn-primary" disabled={!ready || issuing} onClick={publishNumber}>
-            {issuing ? "Menerbitkan…" : "Terbitkan nomor"}
-          </button>}
+          <button type="button" className="btn-primary" disabled={!ready || saving} onClick={saveAndDownload}>
+            {saving ? "Menyimpan…" : "Simpan dan unduh PDF"}
+          </button>
         </div>
-        {issueError && <p role="alert" className="text-sm text-red-700">{issueError}</p>}
+        {saveError && <p role="alert" className="text-sm text-red-700">{saveError}</p>}
+        {savedPdf?.athleteId === athleteId && (
+          <div className="flex flex-wrap items-center gap-2 text-sm" role="status">
+            <span>PDF tersimpan di riwayat.</span>
+            <a className="btn-secondary" href={`/api/dispensation-letters/${savedPdf.id}`} target="_blank" rel="noreferrer">Pratinjau tersimpan</a>
+            <a className="btn-secondary" href={`/api/dispensation-letters/${savedPdf.id}?download=1`} download>Unduh lagi</a>
+          </div>
+        )}
         {headerError && <p role="alert" className="text-sm text-red-700">{headerError}</p>}
         {ready
           ? <iframe className="h-[72vh] min-h-96 w-full rounded-lg border bg-white" title="Pratinjau PDF surat dispensasi" src={preview.url} />

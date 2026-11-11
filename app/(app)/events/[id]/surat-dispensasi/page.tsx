@@ -1,15 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import DispensasiEditor from "@/components/DispensasiEditor";
-import { getAuth } from "@/lib/supabase/auth-helper";
+import { canManageLetters } from "@/lib/dispensasi-history";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 
 export default async function SuratDispensasiPage({ params }: { params: { id: string } }) {
-  const { profile } = await getAuth();
-  if (profile?.account_status !== "ACTIVE" || (profile.role !== "admin" && profile.role !== "operator")) notFound();
+  if (!(await canManageLetters())) notFound();
 
   const supabase = createClient();
   const numbers = createServiceClient().from("dispensation_letter_numbers");
@@ -37,7 +36,10 @@ export default async function SuratDispensasiPage({ params }: { params: { id: st
       <Link href={`/events/${params.id}`} className="text-sm text-brand-700 hover:underline">
         ← Kembali ke event
       </Link>
-      <h1 className="text-2xl font-bold">Surat Dispensasi</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">Surat Dispensasi</h1>
+        <Link href={`/events/${params.id}/surat-dispensasi/riwayat`} className="btn-secondary">Riwayat surat</Link>
+      </div>
       {athletes.length > 0
         ? <DispensasiEditor
             event={eventResult.data}
